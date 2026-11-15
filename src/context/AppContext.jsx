@@ -19,18 +19,19 @@ import { playSound } from '../utils/audio';
 
 const AppContext = createContext();
 
+// Production keys (v2 - Clean Production State without mock transactions)
 const STORAGE_KEYS = {
-  SETTINGS: 'bb_pos_settings_v1',
-  TABLES: 'bb_pos_tables_v1',
-  PRODUCTS: 'bb_pos_products_v1',
-  RAW: 'bb_pos_raw_v1',
-  CUSTOMERS: 'bb_pos_customers_v1',
-  ORDERS: 'bb_pos_orders_v1',
-  SUPPLIERS: 'bb_pos_suppliers_v1',
-  PURCHASES: 'bb_pos_purchases_v1',
-  EXPENSES: 'bb_pos_expenses_v1',
-  STAFF: 'bb_pos_staff_v1',
-  AUDIT: 'bb_pos_audit_v1',
+  SETTINGS: 'bb_pos_settings_v2',
+  TABLES: 'bb_pos_tables_v2',
+  PRODUCTS: 'bb_pos_products_v2',
+  RAW: 'bb_pos_raw_v2',
+  CUSTOMERS: 'bb_pos_customers_v2',
+  ORDERS: 'bb_pos_orders_v2',
+  SUPPLIERS: 'bb_pos_suppliers_v2',
+  PURCHASES: 'bb_pos_purchases_v2',
+  EXPENSES: 'bb_pos_expenses_v2',
+  STAFF: 'bb_pos_staff_v2',
+  AUDIT: 'bb_pos_audit_v2',
 };
 
 function loadStorage(key, fallback) {
@@ -44,6 +45,19 @@ function loadStorage(key, fallback) {
 }
 
 export function AppProvider({ children }) {
+  // Clear any legacy mock data from v1 keys if present
+  useEffect(() => {
+    try {
+      const legacyKeys = [
+        'bb_pos_settings_v1', 'bb_pos_tables_v1', 'bb_pos_products_v1',
+        'bb_pos_raw_v1', 'bb_pos_customers_v1', 'bb_pos_orders_v1',
+        'bb_pos_suppliers_v1', 'bb_pos_purchases_v1', 'bb_pos_expenses_v1',
+        'bb_pos_staff_v1', 'bb_pos_audit_v1'
+      ];
+      legacyKeys.forEach(k => localStorage.removeItem(k));
+    } catch (e) {}
+  }, []);
+
   const [settings, setSettings] = useState(() => loadStorage(STORAGE_KEYS.SETTINGS, initialSettings));
   const [tables, setTables] = useState(() => loadStorage(STORAGE_KEYS.TABLES, initialTables));
   const [products, setProducts] = useState(() => loadStorage(STORAGE_KEYS.PRODUCTS, initialProducts));
@@ -57,54 +71,16 @@ export function AppProvider({ children }) {
   const [auditLogs, setAuditLogs] = useState(() => loadStorage(STORAGE_KEYS.AUDIT, initialAuditLogs));
 
   // Navigation State
-  const [activeView, setActiveView] = useState('pos'); // Start on POS as per typical kiosk, or toggle to dashboard
-  const [activeModal, setActiveModal] = useState(null); // 'customization', 'tableSelect', 'customerSelect', 'payment', 'receipt', 'landing', etc.
+  const [activeView, setActiveView] = useState('pos');
+  const [activeModal, setActiveModal] = useState(null);
   const [modalData, setModalData] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // Cart State
-  const [cart, setCart] = useState([
-    // Pre-populate with order matching Screen 5 & 7 & 9 for instant exact match, or empty
-    {
-      id: 'cart-1',
-      productId: 'prod-01',
-      name: 'Cafe Latte',
-      variant: 'Large (360ml)',
-      addons: ['Extra Melted Cheese'],
-      addonPrice: 30,
-      basePrice: 180,
-      price: 210,
-      quantity: 1,
-      note: ''
-    },
-    {
-      id: 'cart-2',
-      productId: 'prod-08',
-      name: 'Crispy Veg Supreme Burger',
-      variant: null,
-      addons: [],
-      addonPrice: 0,
-      basePrice: 130,
-      price: 130,
-      quantity: 1,
-      note: ''
-    },
-    {
-      id: 'cart-3',
-      productId: 'prod-09',
-      name: 'Double Cheese Burst Burger',
-      variant: null,
-      addons: [],
-      addonPrice: 0,
-      basePrice: 165,
-      price: 165,
-      quantity: 1,
-      note: ''
-    }
-  ]);
+  // Cart State - Clean empty initial cart
+  const [cart, setCart] = useState([]);
   const [orderChannel, setOrderChannel] = useState('Dine-In'); // 'Dine-In', 'Takeaway', 'Delivery'
-  const [selectedTable, setSelectedTable] = useState(initialTables[0]); // T-01 Table 1 (Window)
-  const [selectedCustomer, setSelectedCustomer] = useState(initialCustomers[5]); // Rahul (+91 98765 43210)
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [discountPercent, setDiscountPercent] = useState(0);
 
   // Auto-sync to localStorage
@@ -129,7 +105,6 @@ export function AppProvider({ children }) {
   // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Don't trigger if user is typing in an input or textarea
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
         if (e.key === 'Escape') {
           setActiveModal(null);
@@ -381,21 +356,21 @@ export function AppProvider({ children }) {
     showToast(`Order ${invoiceNo} completed successfully!`);
   };
 
-  // Reset Demo Data
+  // Reset to Clean Production State (Zero Mock Data)
   const resetDemoData = () => {
     setSettings(initialSettings);
     setTables(initialTables);
     setProducts(initialProducts);
     setRawMaterials(initialRawMaterials);
-    setCustomers(initialCustomers);
-    setOrders(initialOrders);
-    setSuppliers(initialSuppliers);
-    setPurchases(initialPurchases);
-    setExpenses(initialExpenses);
+    setCustomers([]);
+    setOrders([]);
+    setSuppliers([]);
+    setPurchases([]);
+    setExpenses([]);
     setStaff(initialStaff);
-    setAuditLogs(initialAuditLogs);
+    setAuditLogs([]);
     clearCart();
-    showToast('Reset to original demo data successfully!');
+    showToast('Reset to clean production state (Zero Mock Data)!');
   };
 
   // Export Database JSON
@@ -424,6 +399,11 @@ export function AppProvider({ children }) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast('Backup JSON downloaded!');
+  };
+
+  // Menu items cannot be deleted
+  const deleteProduct = () => {
+    showToast('Menu items are protected and cannot be deleted', 'warning');
   };
 
   // Raw Material Stock Adjust
@@ -471,6 +451,7 @@ export function AppProvider({ children }) {
         categories: initialCategories,
         products,
         setProducts,
+        deleteProduct,
         rawMaterials,
         setRawMaterials,
         customers,

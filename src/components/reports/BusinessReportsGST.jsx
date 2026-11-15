@@ -1,40 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Printer, Download, IndianRupee, Percent, Wallet, TrendingDown } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export default function BusinessReportsGST() {
-  const { orders, expenses, showToast } = useApp();
+  const { orders, expenses, products, showToast } = useApp();
 
   const [dateRange, setDateRange] = useState('Today'); // 'Today', 'Last 7 Days', 'Last 30 Days', 'Custom Range'
 
   const ranges = ['Today', 'Last 7 Days', 'Last 30 Days', 'Custom Range'];
 
-  // Calculate matching stats
+  // Calculate matching stats strictly from real data
   const completedOrders = orders.filter(o => o.status === 'Completed');
-  const grossSales = completedOrders.reduce((s, o) => s + o.total, 0) || 2283.75;
-  const totalTax = completedOrders.reduce((s, o) => s + (o.cgst + o.sgst), 0) || 108.75;
+  const grossSales = completedOrders.reduce((s, o) => s + o.total, 0);
+  const totalTax = completedOrders.reduce((s, o) => s + (o.cgst + o.sgst), 0);
   const cgstTotal = totalTax / 2;
   const sgstTotal = totalTax / 2;
-  const taxableValue = grossSales - totalTax;
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0) || 60049.00;
+  const taxableValue = Math.max(0, grossSales - totalTax);
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const estimatedNetProfit = grossSales - totalExpenses;
 
-  // Category breakdown matching Page 34
-  const categorySales = [
-    { category: 'Coffee', units: 4, revenue: 685.00 },
-    { category: 'Burgers & Wraps', units: 3, revenue: 425.00 },
-    { category: 'Pizza', units: 1, revenue: 410.00 },
-    { category: 'Cold Beverages', units: 2, revenue: 240.00 },
-    { category: 'Snacks & Sides', units: 1, revenue: 140.00 },
-    { category: 'Sandwiches', units: 1, revenue: 140.00 },
-    { category: 'Tea & Chai', units: 2, revenue: 135.00 },
-  ];
+  // Category breakdown aggregated dynamically from actual orders
+  const categorySales = useMemo(() => {
+    const cats = {};
+    completedOrders.forEach(o => {
+      o.items?.forEach(it => {
+        const prod = products.find(p => p.id === it.id || p.name === it.name);
+        const catName = prod ? prod.category : 'General';
+        if (!cats[catName]) cats[catName] = { category: catName, units: 0, revenue: 0 };
+        cats[catName].units += it.quantity;
+        cats[catName].revenue += it.total || (it.price * it.quantity);
+      });
+    });
+    return Object.values(cats).sort((a, b) => b.revenue - a.revenue);
+  }, [completedOrders, products]);
 
-  // Cashier ranking matching Page 34
-  const cashierSales = [
-    { name: 'Rajesh Kumar (Owner)', bills: 2, sales: 1160.25 },
-    { name: 'Sunita Rao (Cashier)', bills: 2, sales: 1123.50 },
-  ];
+  // Cashier ranking dynamically aggregated from actual orders
+  const cashierSales = useMemo(() => {
+    const staffSales = {};
+    completedOrders.forEach(o => {
+      const cName = o.cashierName || 'Counter Staff';
+      if (!staffSales[cName]) staffSales[cName] = { name: cName, bills: 0, sales: 0 };
+      staffSales[cName].bills += 1;
+      staffSales[cName].sales += o.total;
+    });
+    return Object.values(staffSales).sort((a, b) => b.sales - a.sales);
+  }, [completedOrders]);
 
   const handlePrint = () => {
     window.print();
@@ -106,7 +116,7 @@ export default function BusinessReportsGST() {
         ))}
       </div>
 
-      {/* KPI Cards (Page 33) */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Gross Sales */}
         <div className="bg-[#171c26] p-5 rounded-2xl border border-[#232a39]">
@@ -144,16 +154,16 @@ export default function BusinessReportsGST() {
         {/* Net Profit */}
         <div className="bg-[#171c26] p-5 rounded-2xl border border-[#232a39]">
           <span className="text-xs text-slate-400 font-medium">Estimated Net Profit</span>
-          <div className={`text-2xl font-black font-mono mt-1 ${estimatedNetProfit >= 0 ? 'text-emerald-400' : 'text-emerald-400'}`}>
+          <div className={`text-2xl font-black font-mono mt-1 ${estimatedNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
             ₹{estimatedNetProfit.toFixed(2)}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
-            Revenue - COGS - Expenses
+            Revenue - Expenses
           </div>
         </div>
       </div>
 
-      {/* GST Summary & Filing Data Table (Page 33) */}
+      {/* GST Summary & Filing Data Table */}
       <div className="bg-[#171c26] p-5 rounded-2xl border border-[#232a39] space-y-3">
         <div>
           <h2 className="text-xs font-bold text-white uppercase tracking-wider">GST Summary & Filing Data</h2>
@@ -186,42 +196,54 @@ export default function BusinessReportsGST() {
         </div>
       </div>
 
-      {/* Bottom Row: Category Breakdown & Staff Sales (Page 34) */}
+      {/* Bottom Row: Category Breakdown & Staff Sales */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sales by Menu Category */}
         <div className="bg-[#171c26] p-5 rounded-2xl border border-[#232a39] space-y-3">
           <h2 className="text-xs font-bold text-white uppercase tracking-wider">Sales by Menu Category</h2>
-          <div className="divide-y divide-[#202737]">
-            {categorySales.map((c) => (
-              <div key={c.category} className="py-2.5 flex items-center justify-between text-xs">
-                <div>
-                  <span className="font-bold text-slate-200">{c.category}</span>
-                  <span className="text-[10px] text-slate-500 block">{c.units} units sold</span>
+          {categorySales.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-xs">
+              No sales recorded yet. Completed orders will categorize here.
+            </div>
+          ) : (
+            <div className="divide-y divide-[#202737]">
+              {categorySales.map((c) => (
+                <div key={c.category} className="py-2.5 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-bold text-slate-200">{c.category}</span>
+                    <span className="text-[10px] text-slate-500 block">{c.units} units sold</span>
+                  </div>
+                  <div className="font-mono font-bold text-white">
+                    ₹{c.revenue.toFixed(2)}
+                  </div>
                 </div>
-                <div className="font-mono font-bold text-white">
-                  ₹{c.revenue.toFixed(2)}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Cashier & Staff Sales Performance */}
         <div className="bg-[#171c26] p-5 rounded-2xl border border-[#232a39] space-y-3">
           <h2 className="text-xs font-bold text-white uppercase tracking-wider">Cashier & Staff Sales Performance</h2>
-          <div className="divide-y divide-[#202737]">
-            {cashierSales.map((cs) => (
-              <div key={cs.name} className="py-3 flex items-center justify-between text-xs">
-                <div>
-                  <span className="font-bold text-slate-200">{cs.name}</span>
-                  <span className="text-[10px] text-slate-500 block">{cs.bills} bills generated</span>
+          {cashierSales.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-xs">
+              No cashier transactions recorded yet.
+            </div>
+          ) : (
+            <div className="divide-y divide-[#202737]">
+              {cashierSales.map((cs) => (
+                <div key={cs.name} className="py-3 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-bold text-slate-200">{cs.name}</span>
+                    <span className="text-[10px] text-slate-500 block">{cs.bills} bills generated</span>
+                  </div>
+                  <div className="font-mono font-black text-emerald-400 text-sm">
+                    ₹{cs.sales.toFixed(2)}
+                  </div>
                 </div>
-                <div className="font-mono font-black text-emerald-400 text-sm">
-                  ₹{cs.sales.toFixed(2)}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

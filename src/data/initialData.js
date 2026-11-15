@@ -1,4 +1,4 @@
-// Accurate initial dataset for Brew & Bite Cafe POS
+// Initial dataset for Brew & Bite Cafe POS - Clean Production State (Zero Mock Data)
 
 export const initialSettings = {
   brandName: "Brew & Bite Cafe",
@@ -62,7 +62,7 @@ export const initialProducts = [
     price: 140,
     costPrice: 38,
     gstRate: 5,
-    stock: 74,
+    stock: 75,
     dietary: 'Pure Veg',
     image: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?w=500&auto=format&fit=crop&q=80',
     hasSizes: true,
@@ -191,7 +191,7 @@ export const initialProducts = [
     price: 130,
     costPrice: 38,
     gstRate: 5,
-    stock: 58,
+    stock: 59,
     dietary: 'Pure Veg',
     image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&auto=format&fit=crop&q=80',
     hasSizes: false,
@@ -209,7 +209,7 @@ export const initialProducts = [
     price: 165,
     costPrice: 52,
     gstRate: 5,
-    stock: 44,
+    stock: 45,
     dietary: 'Pure Veg',
     image: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=500&auto=format&fit=crop&q=80',
     hasSizes: false,
@@ -512,429 +512,25 @@ export const initialAvailableAddons = [
 ];
 
 export const initialRawMaterials = [
-  { id: 'RAW-001', name: 'Arabica Coffee Beans', code: 'RAW-001', category: 'Coffee & Tea', currentStock: 12.464, minThreshold: 3, unit: 'KG', unitCost: 750, status: 'Sufficient' },
-  { id: 'RAW-012', name: 'Artisanal Vanilla Ice Cream', code: 'RAW-012', category: 'Frozen', currentStock: 15, minThreshold: 4, unit: 'Liter', unitCost: 220, status: 'Sufficient' },
-  { id: 'RAW-004', name: 'Assam Masala Tea Leaves', code: 'RAW-004', category: 'Coffee & Tea', currentStock: 7.985, minThreshold: 2, unit: 'KG', unitCost: 380, status: 'Sufficient' },
-  { id: 'RAW-005', name: 'Brioche Burger Buns', code: 'RAW-005', category: 'Bakery', currentStock: 57, minThreshold: 15, unit: 'Piece', unitCost: 15, status: 'Sufficient' },
-  { id: 'RAW-006', name: 'Diced Mozzarella & Cheddar', code: 'RAW-006', category: 'Dairy', currentStock: 13.87, minThreshold: 4, unit: 'KG', unitCost: 420, status: 'Sufficient' },
-  { id: 'RAW-002', name: 'Fresh Full Cream Milk', code: 'RAW-002', category: 'Dairy', currentStock: 44.48, minThreshold: 10, unit: 'Liter', unitCost: 65, status: 'Sufficient' },
-  { id: 'RAW-007', name: 'Handcrafted Pizza Dough 8-inch', code: 'RAW-007', category: 'Bakery', currentStock: 35, minThreshold: 10, unit: 'Piece', unitCost: 30, status: 'Sufficient' },
-  { id: 'RAW-008', name: 'Imported French Fries Cut', code: 'RAW-008', category: 'Frozen', currentStock: 18, minThreshold: 5, unit: 'KG', unitCost: 160, status: 'Sufficient' },
-  { id: 'RAW-010', name: 'Jumbo Sandwich Bread Loaf', code: 'RAW-010', category: 'Bakery', currentStock: 20, minThreshold: 5, unit: 'Packet', unitCost: 45, status: 'Sufficient' },
-  { id: 'RAW-003', name: 'Organic White Sugar', code: 'RAW-003', category: 'Pantry', currentStock: 24.99, minThreshold: 5, unit: 'KG', unitCost: 45, status: 'Sufficient' }
+  { id: 'RAW-001', name: 'Arabica Coffee Beans', code: 'RAW-001', category: 'Coffee & Tea', currentStock: 15.0, minThreshold: 3, unit: 'KG', unitCost: 750, status: 'Sufficient' },
+  { id: 'RAW-012', name: 'Artisanal Vanilla Ice Cream', code: 'RAW-012', category: 'Frozen', currentStock: 15.0, minThreshold: 4, unit: 'Liter', unitCost: 220, status: 'Sufficient' },
+  { id: 'RAW-004', name: 'Assam Masala Tea Leaves', code: 'RAW-004', category: 'Coffee & Tea', currentStock: 10.0, minThreshold: 2, unit: 'KG', unitCost: 380, status: 'Sufficient' },
+  { id: 'RAW-005', name: 'Brioche Burger Buns', code: 'RAW-005', category: 'Bakery', currentStock: 60, minThreshold: 15, unit: 'Piece', unitCost: 15, status: 'Sufficient' },
+  { id: 'RAW-006', name: 'Diced Mozzarella & Cheddar', code: 'RAW-006', category: 'Dairy', currentStock: 15.0, minThreshold: 4, unit: 'KG', unitCost: 420, status: 'Sufficient' },
+  { id: 'RAW-002', name: 'Fresh Full Cream Milk', code: 'RAW-002', category: 'Dairy', currentStock: 50.0, minThreshold: 10, unit: 'Liter', unitCost: 65, status: 'Sufficient' },
+  { id: 'RAW-007', name: 'Handcrafted Pizza Dough 8-inch', code: 'RAW-007', category: 'Bakery', currentStock: 40, minThreshold: 10, unit: 'Piece', unitCost: 30, status: 'Sufficient' },
+  { id: 'RAW-008', name: 'Imported French Fries Cut', code: 'RAW-008', category: 'Frozen', currentStock: 20.0, minThreshold: 5, unit: 'KG', unitCost: 160, status: 'Sufficient' },
+  { id: 'RAW-010', name: 'Jumbo Sandwich Bread Loaf', code: 'RAW-010', category: 'Bakery', currentStock: 25, minThreshold: 5, unit: 'Packet', unitCost: 45, status: 'Sufficient' },
+  { id: 'RAW-003', name: 'Organic White Sugar', code: 'RAW-003', category: 'Pantry', currentStock: 25.0, minThreshold: 5, unit: 'KG', unitCost: 45, status: 'Sufficient' }
 ];
 
-export const initialCustomers = [
-  {
-    id: 'cust-1',
-    name: 'Priya Patel',
-    phone: '+91 97312 34567',
-    email: 'priya.patel@outlook.com',
-    ordersCount: 12,
-    totalSpent: 6420.00,
-    avgOrderValue: 535.0,
-    notes: 'Loves farmhouse pizza and cold coffee.'
-  },
-  {
-    id: 'cust-2',
-    name: 'Sneha Rao',
-    phone: '+91 98860 12345',
-    email: 'sneha.rao@techcorp.in',
-    ordersCount: 9,
-    totalSpent: 4120.00,
-    avgOrderValue: 457.8,
-    notes: 'Prefers almond milk & oat latte.'
-  },
-  {
-    id: 'cust-3',
-    name: 'Rahul Sharma',
-    phone: '+91 98451 23456',
-    email: 'rahul.s@gmail.com',
-    ordersCount: 8,
-    totalSpent: 3850.00,
-    avgOrderValue: 481.3,
-    notes: 'Regular cappuccino lover. Prefers less sugar.'
-  },
-  {
-    id: 'cust-4',
-    name: 'Amit Verma',
-    phone: '+91 99002 98765',
-    email: 'amit.v@yahoo.com',
-    ordersCount: 5,
-    totalSpent: 2190.00,
-    avgOrderValue: 438.0,
-    notes: 'Corporate group order contact.'
-  },
-  {
-    id: 'cust-5',
-    name: 'Vikram Singh',
-    phone: '+91 96111 87654',
-    email: 'vikram.singh@gmail.com',
-    ordersCount: 3,
-    totalSpent: 1450.00,
-    avgOrderValue: 483.3,
-    notes: 'Weekend regular with family.'
-  },
-  {
-    id: 'cust-6',
-    name: 'Rahul',
-    phone: '+91 98765 43210',
-    email: 'rahul.walkin@example.com',
-    ordersCount: 1,
-    totalSpent: 530.25,
-    avgOrderValue: 530.3,
-    notes: 'Registered at counter'
-  }
-];
-
-export const initialOrders = [
-  {
-    id: 'ord-1006',
-    invoiceNo: 'BB-1006',
-    tokenNo: 101,
-    createdAt: '2026-10-07T07:44:00',
-    displayDate: '07 Oct 07:44 am',
-    channel: 'Dine In',
-    table: 'Table 1 (Window)',
-    tableId: 'T-01',
-    customerName: 'Rahul Sharma',
-    customerPhone: '+91 98451 23456',
-    items: [
-      { id: 'prod-01', name: 'Cafe Latte', variant: 'Regular (240ml)', price: 140, quantity: 1, total: 140 },
-      { id: 'prod-11', name: 'Gourmet Veg Club Sandwich', price: 140, quantity: 1, total: 140 }
-    ],
-    itemsSummary: '1x Cafe Latte, 1x Gourmet Veg Club Sandwich',
-    itemsCount: 2,
-    subtotal: 280.00,
-    cgst: 7.00,
-    sgst: 7.00,
-    discount: 0,
-    total: 294.00,
-    paymentMethod: 'UPI',
-    status: 'Completed',
-    cashierName: 'Rajesh Kumar (Owner)'
-  },
-  {
-    id: 'ord-1005',
-    invoiceNo: 'BB-1005',
-    tokenNo: 101,
-    createdAt: '2026-10-07T06:20:00',
-    displayDate: '07 Oct 06:20 am',
-    channel: 'Dine In',
-    table: 'Table 4 (Booth)',
-    tableId: 'T-04',
-    customerName: 'Vikram Singh',
-    customerPhone: '+91 96111 87654',
-    items: [
-      { id: 'prod-10', name: 'Farmhouse Feast Pizza', variant: 'Regular 8"', price: 280, quantity: 1, total: 280 },
-      { id: 'prod-14', name: 'Loaded Cheese Garlic Bread', price: 140, quantity: 1, total: 140 },
-      { id: 'prod-04', name: 'Classic Cappuccino', variant: 'Large (320ml)', price: 170, quantity: 2, total: 340 }
-    ],
-    itemsSummary: '1x Farmhouse Feast Pizza, 1x Loaded Cheese Garlic Bread, 2x Classic Cappuccino',
-    itemsCount: 4,
-    subtotal: 760.00,
-    cgst: 19.00,
-    sgst: 19.00,
-    discount: 0,
-    total: 829.50,
-    paymentMethod: 'Split',
-    status: 'Completed',
-    cashierName: 'Sunita Rao (Cashier)'
-  },
-  {
-    id: 'ord-1008',
-    invoiceNo: 'BB-1008',
-    tokenNo: 103,
-    createdAt: '2026-10-07T06:32:00',
-    displayDate: '07 Oct 06:32 am',
-    channel: 'Dine In',
-    table: 'Table 1 (Window)',
-    tableId: 'T-01',
-    customerName: 'Rahul',
-    customerPhone: '+91 98765 43210',
-    items: [
-      {
-        id: 'prod-01',
-        name: 'Cafe Latte',
-        variant: 'Large (360ml)',
-        addons: ['Extra Melted Cheese'],
-        notes: '',
-        price: 210,
-        quantity: 1,
-        total: 210
-      },
-      {
-        id: 'prod-08',
-        name: 'Crispy Veg Supreme Burger',
-        price: 130,
-        quantity: 1,
-        total: 130
-      },
-      {
-        id: 'prod-09',
-        name: 'Double Cheese Burst Burger',
-        price: 165,
-        quantity: 1,
-        total: 165
-      }
-    ],
-    itemsSummary: '1x Cafe Latte, 1x Crispy Veg Supreme Burger, 1x Double Cheese Burst Burger',
-    itemsCount: 3,
-    subtotal: 505.00,
-    cgst: 12.63,
-    sgst: 12.63,
-    discount: 0,
-    total: 530.25,
-    paymentMethod: 'UPI',
-    status: 'Completed',
-    cashierName: 'Rajesh Kumar (Owner)'
-  },
-  {
-    id: 'ord-1007',
-    invoiceNo: 'BB-1007',
-    tokenNo: 102,
-    createdAt: '2026-10-07T04:00:00',
-    displayDate: '07 Oct 04:00 am',
-    channel: 'Dine In',
-    table: 'Table 2',
-    tableId: 'T-02',
-    customerName: 'Walk-in Guest',
-    customerPhone: '',
-    items: [
-      { id: 'prod-04', name: 'Classic Cappuccino', price: 130, quantity: 1, total: 130 },
-      { id: 'prod-03', name: 'Caramel Macchiato', price: 175, quantity: 1, total: 175 },
-      { id: 'prod-12', name: 'Kullad Masala Chai', price: 60, quantity: 3, total: 180 },
-      { id: 'prod-06', name: 'Classic Salted French Fries', price: 100, quantity: 1, total: 100 }
-    ],
-    itemsSummary: '1x Classic Cappuccino, 1x Caramel Macchiato, 3x Kullad Masala Chai',
-    itemsCount: 5,
-    subtotal: 600.00,
-    cgst: 15.00,
-    sgst: 15.00,
-    discount: 0,
-    total: 630.00,
-    paymentMethod: 'UPI',
-    status: 'Completed',
-    cashierName: 'Rajesh Kumar (Owner)'
-  },
-  {
-    id: 'ord-1004',
-    invoiceNo: 'BB-1004',
-    tokenNo: 101,
-    createdAt: '2026-10-06T08:20:00',
-    displayDate: '06 Oct 08:20 am',
-    channel: 'Delivery',
-    table: '',
-    customerName: 'Sneha Rao',
-    customerPhone: '+91 98860 12345',
-    items: [
-      { id: 'prod-07', name: 'Creamy Alfredo White Sauce Pasta', price: 210, quantity: 2, total: 420 },
-      { id: 'prod-21', name: 'Virgin Mint Mojito', price: 120, quantity: 1, total: 120 }
-    ],
-    itemsSummary: '2x Creamy Alfredo White Sauce Pasta, 1x Virgin Mint Mojito',
-    itemsCount: 3,
-    subtotal: 600.00,
-    cgst: 15.00,
-    sgst: 15.00,
-    discount: 0,
-    total: 630.00,
-    paymentMethod: 'UPI',
-    status: 'Completed',
-    cashierName: 'Sunita Rao (Cashier)'
-  },
-  {
-    id: 'ord-1003',
-    invoiceNo: 'BB-1003',
-    tokenNo: 101,
-    createdAt: '2026-10-05T08:20:00',
-    displayDate: '05 Oct 08:20 am',
-    channel: 'Takeaway',
-    table: '',
-    customerName: 'Amit Verma',
-    customerPhone: '+91 99002 98765',
-    items: [
-      { id: 'prod-08', name: 'Crispy Veg Supreme Burger', price: 130, quantity: 3, total: 390 },
-      { id: 'prod-12', name: 'Kullad Masala Chai', price: 60, quantity: 3, total: 180 }
-    ],
-    itemsSummary: '3x Crispy Veg Supreme Burger, 3x Kullad Masala Chai',
-    itemsCount: 6,
-    subtotal: 570.00,
-    cgst: 14.25,
-    sgst: 14.25,
-    discount: 0,
-    total: 598.50,
-    paymentMethod: 'Cash',
-    status: 'Completed',
-    cashierName: 'Sunita Rao (Cashier)'
-  },
-  {
-    id: 'ord-1002',
-    invoiceNo: 'BB-1002',
-    tokenNo: 101,
-    createdAt: '2026-10-04T08:20:00',
-    displayDate: '04 Oct 08:20 am',
-    channel: 'Dine In',
-    table: 'Table 2',
-    tableId: 'T-02',
-    customerName: 'Priya Patel',
-    customerPhone: '+91 97312 34567',
-    items: [
-      { id: 'prod-15', name: 'Margherita Classic Pizza', price: 220, quantity: 1, total: 220 },
-      { id: 'prod-05', name: 'Classic Cold Coffee with Ice Cream', price: 160, quantity: 2, total: 320 }
-    ],
-    itemsSummary: '1x Margherita Classic Pizza, 2x Classic Cold Coffee',
-    itemsCount: 4,
-    subtotal: 610.00,
-    cgst: 15.25,
-    sgst: 15.25,
-    discount: 10,
-    total: 640.50,
-    paymentMethod: 'Card',
-    status: 'Completed',
-    cashierName: 'Rajesh Kumar (Owner)'
-  },
-  {
-    id: 'ord-1001',
-    invoiceNo: 'BB-1001',
-    tokenNo: 101,
-    createdAt: '2026-10-03T08:20:00',
-    displayDate: '03 Oct 08:20 am',
-    channel: 'Dine In',
-    table: 'Table 1 (Window)',
-    tableId: 'T-01',
-    customerName: 'Rahul Sharma',
-    customerPhone: '+91 98451 23456',
-    items: [
-      { id: 'prod-04', name: 'Classic Cappuccino', price: 130, quantity: 2, total: 260 },
-      { id: 'prod-06', name: 'Classic Salted French Fries', price: 100, quantity: 1, total: 100 }
-    ],
-    itemsSummary: '2x Classic Cappuccino, 1x Classic Salted French Fries',
-    itemsCount: 3,
-    subtotal: 360.00,
-    cgst: 9.00,
-    sgst: 9.00,
-    discount: 0,
-    total: 378.00,
-    paymentMethod: 'UPI',
-    status: 'Completed',
-    cashierName: 'Sunita Rao (Cashier)'
-  }
-];
-
-export const initialSuppliers = [
-  {
-    id: 'sup-1',
-    name: 'Chikmagalur Coffee Plantation Ltd',
-    contactPerson: 'Venkatesh Murthy',
-    phone: '+91 94481 12345',
-    email: 'orders@chikmagalurcoffee.in',
-    gstin: '29AAACC1234F1Z1',
-    totalSpend: 45000.00,
-    balance: 0.00
-  },
-  {
-    id: 'sup-2',
-    name: 'Amul Dairy Distribution Bangalore',
-    contactPerson: 'Suresh Patel',
-    phone: '+91 98450 67890',
-    email: 'amulbangalore@amul.coop',
-    gstin: '29AABCA5678G1Z2',
-    totalSpend: 32400.00,
-    balance: 0.00
-  },
-  {
-    id: 'sup-3',
-    name: 'Bangalore Bakery & Packaging Supplies',
-    contactPerson: 'Harish Kumar',
-    phone: '+91 99001 23456',
-    email: 'harish@blrpackaging.com',
-    gstin: '29AADCB9012H1Z3',
-    totalSpend: 18500.00,
-    balance: 1200.00
-  }
-];
-
-export const initialPurchases = [
-  {
-    id: 'pur-1',
-    invoiceNo: 'INV-COF-8821',
-    purchaseDate: '2026-10-07',
-    supplierId: 'sup-1',
-    supplierName: 'Chikmagalur Coffee Plantation Ltd',
-    contactPerson: 'Venkatesh Murthy',
-    itemsReceived: '10 KG Arabica Coffee Beans',
-    subtotal: 7500.00,
-    tax: 375.00,
-    totalAmount: 7875.00,
-    paymentMethod: 'BANK_TRANSFER'
-  },
-  {
-    id: 'pur-2',
-    invoiceNo: 'INV-AMUL-9904',
-    purchaseDate: '2026-10-07',
-    supplierId: 'sup-2',
-    supplierName: 'Amul Dairy Distribution Bangalore',
-    contactPerson: 'Suresh Patel',
-    itemsReceived: '30 Liter Fresh Full Cream Milk, 5 KG Diced Mozzarella...',
-    subtotal: 4200.00,
-    tax: 210.00,
-    totalAmount: 4410.00,
-    paymentMethod: 'UPI'
-  }
-];
-
-export const initialExpenses = [
-  {
-    id: 'exp-1',
-    title: 'Social Media Instagram Marketing Promotion',
-    category: 'Marketing',
-    date: '2026-10-07',
-    amount: 3500.00,
-    paymentMethod: 'CARD',
-    reference: 'FB-ADS-991',
-    notes: 'Weekend special discount ad campaign'
-  },
-  {
-    id: 'exp-2',
-    title: 'Cafe Cleaning & Sanitization Supplies',
-    category: 'Maintenance',
-    date: '2026-10-07',
-    amount: 1850.00,
-    paymentMethod: 'CASH',
-    reference: 'CASH-0021',
-    notes: 'Eco-friendly cleaning supplies and napkins'
-  },
-  {
-    id: 'exp-3',
-    title: 'ACT Fibernet 300 Mbps High-speed Internet',
-    category: 'Internet',
-    date: '2026-10-07',
-    amount: 1499.00,
-    paymentMethod: 'CARD',
-    reference: 'TXN-44912',
-    notes: 'Free Wi-Fi for cafe guests & POS cloud sync'
-  },
-  {
-    id: 'exp-4',
-    title: 'BESCOM Electricity Bill',
-    category: 'Electricity',
-    date: '2026-10-07',
-    amount: 8200.00,
-    paymentMethod: 'UPI',
-    reference: 'UPI-992812',
-    notes: 'Power for commercial espresso machine & chillers'
-  },
-  {
-    id: 'exp-5',
-    title: 'Monthly Cafe Shop Rent (October)',
-    category: 'Rent',
-    date: '2026-10-07',
-    amount: 45000.00,
-    paymentMethod: 'BANK TRANSFER',
-    reference: 'NEFT-883921',
-    notes: 'Indiranagar commercial space rent'
-  }
-];
+// Clean Production State: No mock customers, orders, suppliers, purchases, expenses or logs
+export const initialCustomers = [];
+export const initialOrders = [];
+export const initialSuppliers = [];
+export const initialPurchases = [];
+export const initialExpenses = [];
+export const initialAuditLogs = [];
 
 export const initialStaff = [
   {
@@ -963,52 +559,5 @@ export const initialStaff = [
     phone: '+91 98765 43211',
     pin: '3344',
     status: 'Active'
-  }
-];
-
-export const initialAuditLogs = [
-  {
-    id: 'log-1',
-    timestamp: '2026-10-07 06:32:15',
-    type: 'Recipe Deduction',
-    itemType: 'Raw Material',
-    changeQty: '-0.018 KG',
-    previousStock: '12.482 KG',
-    newStock: '12.464 KG',
-    notes: 'Order BB-1008: 1x Cafe Latte auto-deduction',
-    user: 'Rajesh Kumar'
-  },
-  {
-    id: 'log-2',
-    timestamp: '2026-10-07 06:32:15',
-    type: 'Recipe Deduction',
-    itemType: 'Raw Material',
-    changeQty: '-0.220 Liter',
-    previousStock: '44.700 Liter',
-    newStock: '44.480 Liter',
-    notes: 'Order BB-1008: 1x Fresh Milk auto-deduction',
-    user: 'Rajesh Kumar'
-  },
-  {
-    id: 'log-3',
-    timestamp: '2026-10-07 06:32:15',
-    type: 'Recipe Deduction',
-    itemType: 'Raw Material',
-    changeQty: '-2 Piece',
-    previousStock: '59 Piece',
-    newStock: '57 Piece',
-    notes: 'Order BB-1008: 2x Brioche Buns auto-deduction',
-    user: 'Rajesh Kumar'
-  },
-  {
-    id: 'log-4',
-    timestamp: '2026-10-07 04:00:20',
-    type: 'Purchase Inward',
-    itemType: 'Raw Material',
-    changeQty: '+10.000 KG',
-    previousStock: '2.464 KG',
-    newStock: '12.464 KG',
-    notes: 'Inward INV-COF-8821 from Chikmagalur Coffee',
-    user: 'Rajesh Kumar'
   }
 ];

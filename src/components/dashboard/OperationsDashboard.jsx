@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   Zap, 
   IndianRupee, 
@@ -15,8 +15,13 @@ import { useApp } from '../../context/AppContext';
 export default function OperationsDashboard() {
   const { setActiveView, orders, expenses, customers, products, rawMaterials } = useApp();
 
-  // Calculate dynamic or exact values
-  const todayOrders = orders.filter(o => o.createdAt.startsWith('2026-10-07') || new Date(o.createdAt).toDateString() === new Date().toDateString());
+  // Calculate real values from state
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayOrders = orders.filter(o => 
+    o.createdAt?.startsWith(todayStr) || 
+    (o.createdAt && new Date(o.createdAt).toDateString() === new Date().toDateString())
+  );
+  
   const todaySales = todayOrders.reduce((sum, o) => sum + o.total, 0);
   const aov = todayOrders.length > 0 ? (todaySales / todayOrders.length).toFixed(1) : '0.0';
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -24,28 +29,77 @@ export default function OperationsDashboard() {
 
   // Breakdown by payment
   const paymentBreakdown = {
-    Card: orders.filter(o => o.paymentMethod === 'Card').reduce((s, o) => s + o.total, 0) || 640.50,
-    Cash: orders.filter(o => o.paymentMethod === 'Cash').reduce((s, o) => s + o.total, 0) || 598.50,
-    Split: orders.filter(o => o.paymentMethod === 'Split').reduce((s, o) => s + o.total, 0) || 829.50,
-    Upi: orders.filter(o => o.paymentMethod === 'UPI').reduce((s, o) => s + o.total, 0) || 2462.25
+    Card: orders.filter(o => o.paymentMethod === 'Card').reduce((s, o) => s + o.total, 0),
+    Cash: orders.filter(o => o.paymentMethod === 'Cash').reduce((s, o) => s + o.total, 0),
+    Split: orders.filter(o => o.paymentMethod === 'Split').reduce((s, o) => s + o.total, 0),
+    Upi: orders.filter(o => o.paymentMethod === 'UPI').reduce((s, o) => s + o.total, 0)
   };
   const totalPayAmount = paymentBreakdown.Card + paymentBreakdown.Cash + paymentBreakdown.Split + paymentBreakdown.Upi;
 
-  // Best selling items
-  const bestSellers = [
-    { rank: 1, name: 'Kullad Masala Chai', units: 4, revenue: 240.00 },
-    { rank: 2, name: 'Crispy Veg Supreme Burger', units: 4, revenue: 520.00 },
-    { rank: 3, name: 'Classic Cappuccino', units: 3, revenue: 420.00 },
-    { rank: 4, name: 'Virgin Mint Mojito', units: 2, revenue: 240.00 },
-    { rank: 5, name: 'Creamy Alfredo White Sauce Pasta', units: 2, revenue: 420.00 },
-  ];
+  // Best selling items aggregated from actual orders
+  const bestSellers = useMemo(() => {
+    const counts = {};
+    orders.forEach(ord => {
+      ord.items?.forEach(it => {
+        if (!counts[it.name]) {
+          counts[it.name] = { name: it.name, units: 0, revenue: 0 };
+        }
+        counts[it.name].units += it.quantity;
+        counts[it.name].revenue += it.total || (it.price * it.quantity);
+      });
+    });
+    return Object.values(counts)
+      .sort((a, b) => b.units - a.units)
+      .slice(0, 5)
+      .map((item, idx) => ({ rank: idx + 1, ...item }));
+  }, [orders]);
 
-  // Channel breakdown
-  const channels = [
-    { name: 'Delivery', orders: 1, amount: 630.00, percent: 16, color: 'bg-orange-500' },
-    { name: 'Dine In', orders: 5, amount: 2772.00, percent: 69, color: 'bg-orange-600' },
-    { name: 'Takeaway', orders: 1, amount: 598.50, percent: 15, color: 'bg-amber-600' },
-  ];
+  // Channel breakdown aggregated from actual orders
+  const channels = useMemo(() => {
+    const totalCount = orders.length || 1;
+    const delivery = orders.filter(o => o.channel?.toLowerCase().includes('delivery'));
+    const dineIn = orders.filter(o => o.channel?.toLowerCase().includes('dine'));
+    const takeaway = orders.filter(o => o.channel?.toLowerCase().includes('takeaway'));
+
+    return [
+      { 
+        name: 'Delivery', 
+        orders: delivery.length, 
+        amount: delivery.reduce((s, o) => s + o.total, 0), 
+        percent: orders.length > 0 ? Math.round((delivery.length / totalCount) * 100) : 0, 
+        color: 'bg-orange-500' 
+      },
+      { 
+        name: 'Dine In', 
+        orders: dineIn.length, 
+        amount: dineIn.reduce((s, o) => s + o.total, 0), 
+        percent: orders.length > 0 ? Math.round((dineIn.length / totalCount) * 100) : 0, 
+        color: 'bg-orange-600' 
+      },
+      { 
+        name: 'Takeaway', 
+        orders: takeaway.length, 
+        amount: takeaway.reduce((s, o) => s + o.total, 0), 
+        percent: orders.length > 0 ? Math.round((takeaway.length / totalCount) * 100) : 0, 
+        color: 'bg-amber-600' 
+      },
+    ];
+  }, [orders]);
+
+  // Last 7 days dynamic dates
+  const last7Days = useMemo(() => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const str = d.toISOString().slice(0, 10);
+      const daySales = orders.filter(o => o.createdAt?.startsWith(str)).reduce((s, o) => s + o.total, 0);
+      days.push({ date: str, sales: daySales });
+    }
+    return days;
+  }, [orders]);
+
+  const maxSale = Math.max(100, ...last7Days.map(d => d.sales));
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto overflow-y-auto">
@@ -79,10 +133,10 @@ export default function OperationsDashboard() {
           <div>
             <span className="text-xs text-slate-400 font-medium">Today's Sales</span>
             <div className="text-xl font-black text-white mt-1">
-              ₹{todaySales > 0 ? todaySales.toFixed(2) : '2283.75'}
+              ₹{todaySales.toFixed(2)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">
-              AOV: ₹{aov !== '0.0' ? aov : '570.9'}
+              AOV: ₹{aov}
             </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
@@ -95,7 +149,7 @@ export default function OperationsDashboard() {
           <div>
             <span className="text-xs text-slate-400 font-medium">Today's Orders</span>
             <div className="text-xl font-black text-white mt-1">
-              {todayOrders.length > 0 ? todayOrders.length : 4}
+              {todayOrders.length}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">
               Bills Completed
@@ -111,7 +165,7 @@ export default function OperationsDashboard() {
           <div>
             <span className="text-xs text-slate-400 font-medium">Est. Daily Profit</span>
             <div className="text-xl font-black text-teal-400 mt-1">
-              ₹0.00
+              ₹{Math.max(0, todaySales * 0.65).toFixed(2)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">
               Gross Margin ~65%
@@ -142,7 +196,9 @@ export default function OperationsDashboard() {
         <div className="bg-[#171c26] p-4 rounded-xl border border-[#232a39] flex items-center justify-between">
           <div>
             <span className="text-xs text-slate-400 font-medium">Active / Kitchen Prep</span>
-            <div className="text-xl font-black text-amber-400 mt-1">0</div>
+            <div className="text-xl font-black text-amber-400 mt-1">
+              {orders.filter(o => o.status === 'Preparing' || o.status === 'New').length}
+            </div>
             <div className="text-[11px] text-slate-400 mt-0.5">In Preparation</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
@@ -181,7 +237,7 @@ export default function OperationsDashboard() {
           <div>
             <span className="text-xs text-slate-400 font-medium">Active Products</span>
             <div className="text-xl font-black text-indigo-400 mt-1">{products.length}</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Menu Catalog</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">Menu Catalog (Protected)</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
             <Utensils className="w-5 h-5" />
@@ -199,59 +255,46 @@ export default function OperationsDashboard() {
           </div>
 
           <div className="mt-4 h-56 relative w-full flex items-end">
-            <svg viewBox="0 0 500 200" className="w-full h-full overflow-visible">
-              <defs>
-                <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f97316" stopOpacity="0.45" />
-                  <stop offset="100%" stopColor="#f97316" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
+            {totalPayAmount === 0 ? (
+              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 text-xs">
+                <TrendingUp className="w-8 h-8 mb-2 stroke-1 text-slate-600" />
+                <span>No sales recorded yet</span>
+                <span className="text-[11px] text-slate-600 mt-0.5">Billing orders at POS terminal will plot real-time trend here</span>
+              </div>
+            ) : (
+              <svg viewBox="0 0 500 200" className="w-full h-full overflow-visible">
+                <defs>
+                  <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f97316" stopOpacity="0.45" />
+                    <stop offset="100%" stopColor="#f97316" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
 
-              {/* Grid Lines */}
-              <line x1="40" y1="20" x2="480" y2="20" stroke="#252f40" strokeDasharray="3 3" />
-              <text x="35" y="24" fill="#64748b" fontSize="9" textAnchor="end">₹2400</text>
+                {/* Grid Lines */}
+                <line x1="40" y1="20" x2="480" y2="20" stroke="#252f40" strokeDasharray="3 3" />
+                <text x="35" y="24" fill="#64748b" fontSize="9" textAnchor="end">₹{Math.round(maxSale)}</text>
 
-              <line x1="40" y1="60" x2="480" y2="60" stroke="#252f40" strokeDasharray="3 3" />
-              <text x="35" y="64" fill="#64748b" fontSize="9" textAnchor="end">₹1800</text>
+                <line x1="40" y1="100" x2="480" y2="100" stroke="#252f40" strokeDasharray="3 3" />
+                <text x="35" y="104" fill="#64748b" fontSize="9" textAnchor="end">₹{Math.round(maxSale / 2)}</text>
 
-              <line x1="40" y1="100" x2="480" y2="100" stroke="#252f40" strokeDasharray="3 3" />
-              <text x="35" y="104" fill="#64748b" fontSize="9" textAnchor="end">₹1200</text>
+                <line x1="40" y1="180" x2="480" y2="180" stroke="#252f40" />
+                <text x="35" y="184" fill="#64748b" fontSize="9" textAnchor="end">₹0</text>
 
-              <line x1="40" y1="140" x2="480" y2="140" stroke="#252f40" strokeDasharray="3 3" />
-              <text x="35" y="144" fill="#64748b" fontSize="9" textAnchor="end">₹600</text>
-
-              <line x1="40" y1="180" x2="480" y2="180" stroke="#252f40" />
-              <text x="35" y="184" fill="#64748b" fontSize="9" textAnchor="end">₹0</text>
-
-              {/* Area path */}
-              <path
-                d="M 50 160 C 130 145, 180 150, 260 148 C 340 145, 400 135, 470 35 L 470 180 L 50 180 Z"
-                fill="url(#revenueGrad)"
-              />
-
-              {/* Line path */}
-              <path
-                d="M 50 160 C 130 145, 180 150, 260 148 C 340 145, 400 135, 470 35"
-                fill="none"
-                stroke="#f97316"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-              />
-
-              {/* Data points */}
-              <circle cx="50" cy="160" r="4" fill="#f97316" />
-              <circle cx="155" cy="150" r="4" fill="#f97316" />
-              <circle cx="260" cy="148" r="4" fill="#f97316" />
-              <circle cx="365" cy="142" r="4" fill="#f97316" />
-              <circle cx="470" cy="35" r="5" fill="#f97316" stroke="#ffffff" strokeWidth="2" />
-
-              {/* X Axis Labels */}
-              <text x="50" y="196" fill="#64748b" fontSize="9" textAnchor="middle">2026-10-03</text>
-              <text x="155" y="196" fill="#64748b" fontSize="9" textAnchor="middle">2026-10-04</text>
-              <text x="260" y="196" fill="#64748b" fontSize="9" textAnchor="middle">2026-10-05</text>
-              <text x="365" y="196" fill="#64748b" fontSize="9" textAnchor="middle">2026-10-06</text>
-              <text x="470" y="196" fill="#f97316" fontWeight="bold" fontSize="9" textAnchor="middle">2026-10-07</text>
-            </svg>
+                {/* Plot Points */}
+                {last7Days.map((d, i) => {
+                  const x = 50 + (i * 70);
+                  const y = 180 - ((d.sales / maxSale) * 150);
+                  return (
+                    <g key={d.date}>
+                      <circle cx={x} cy={y} r="4" fill="#f97316" />
+                      <text x={x} y="196" fill="#64748b" fontSize="8" textAnchor="middle">
+                        {d.date.slice(5)}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            )}
           </div>
         </div>
 
@@ -266,20 +309,23 @@ export default function OperationsDashboard() {
             {/* SVG Donut */}
             <div className="relative w-36 h-36">
               <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-                {/* Background Ring */}
                 <circle cx="18" cy="18" r="14" fill="transparent" stroke="#1f2838" strokeWidth="5.5" />
-                {/* Card - Orange (15%) */}
-                <circle cx="18" cy="18" r="14" fill="transparent" stroke="#f97316" strokeWidth="5.5" strokeDasharray="14 88" strokeDashoffset="0" />
-                {/* Cash - Blue (14%) */}
-                <circle cx="18" cy="18" r="14" fill="transparent" stroke="#3b82f6" strokeWidth="5.5" strokeDasharray="13 88" strokeDashoffset="-14" />
-                {/* Split - Teal (18%) */}
-                <circle cx="18" cy="18" r="14" fill="transparent" stroke="#14b8a6" strokeWidth="5.5" strokeDasharray="16 88" strokeDashoffset="-27" />
-                {/* UPI - Purple (53%) */}
-                <circle cx="18" cy="18" r="14" fill="transparent" stroke="#a855f7" strokeWidth="5.5" strokeDasharray="47 88" strokeDashoffset="-43" />
+                {totalPayAmount > 0 && (
+                  <>
+                    <circle cx="18" cy="18" r="14" fill="transparent" stroke="#f97316" strokeWidth="5.5" 
+                      strokeDasharray={`${(paymentBreakdown.Card / totalPayAmount) * 88} 88`} strokeDashoffset="0" />
+                    <circle cx="18" cy="18" r="14" fill="transparent" stroke="#3b82f6" strokeWidth="5.5" 
+                      strokeDasharray={`${(paymentBreakdown.Cash / totalPayAmount) * 88} 88`} strokeDashoffset={`-${(paymentBreakdown.Card / totalPayAmount) * 88}`} />
+                    <circle cx="18" cy="18" r="14" fill="transparent" stroke="#14b8a6" strokeWidth="5.5" 
+                      strokeDasharray={`${(paymentBreakdown.Split / totalPayAmount) * 88} 88`} strokeDashoffset={`-${((paymentBreakdown.Card + paymentBreakdown.Cash) / totalPayAmount) * 88}`} />
+                    <circle cx="18" cy="18" r="14" fill="transparent" stroke="#a855f7" strokeWidth="5.5" 
+                      strokeDasharray={`${(paymentBreakdown.Upi / totalPayAmount) * 88} 88`} strokeDashoffset={`-${((paymentBreakdown.Card + paymentBreakdown.Cash + paymentBreakdown.Split) / totalPayAmount) * 88}`} />
+                  </>
+                )}
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <span className="text-[10px] uppercase tracking-wider text-slate-400">Total</span>
-                <span className="text-xs font-black text-white">₹{Math.round(totalPayAmount)}</span>
+                <span className="text-xs font-black text-white font-mono">₹{totalPayAmount.toFixed(0)}</span>
               </div>
             </div>
 
@@ -318,22 +364,28 @@ export default function OperationsDashboard() {
           <p className="text-[11px] text-slate-400 mt-0.5">Ranked by order volume & popularity</p>
 
           <div className="mt-4 space-y-2.5">
-            {bestSellers.map(item => (
-              <div key={item.rank} className="flex items-center justify-between p-3 rounded-lg bg-[#131720] border border-[#212837] hover:border-[#2f394e] transition-colors">
-                <div className="flex items-center space-x-3">
-                  <span className="w-6 h-6 rounded-md bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold flex items-center justify-center">
-                    #{item.rank}
-                  </span>
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-200">{item.name}</h3>
-                    <span className="text-[10px] text-slate-400">{item.units} units sold</span>
+            {bestSellers.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-xs">
+                No orders processed yet. Items sold at POS will rank here automatically.
+              </div>
+            ) : (
+              bestSellers.map(item => (
+                <div key={item.rank} className="flex items-center justify-between p-3 rounded-lg bg-[#131720] border border-[#212837] hover:border-[#2f394e] transition-colors">
+                  <div className="flex items-center space-x-3">
+                    <span className="w-6 h-6 rounded-md bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold flex items-center justify-center">
+                      #{item.rank}
+                    </span>
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-200">{item.name}</h3>
+                      <span className="text-[10px] text-slate-400">{item.units} units sold</span>
+                    </div>
+                  </div>
+                  <div className="text-xs font-mono font-bold text-emerald-400">
+                    ₹{item.revenue.toFixed(2)}
                   </div>
                 </div>
-                <div className="text-xs font-mono font-bold text-emerald-400">
-                  ₹{item.revenue.toFixed(2)}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -362,7 +414,7 @@ export default function OperationsDashboard() {
           </div>
 
           <div className="mt-6 pt-3 border-t border-[#232a39] flex items-center justify-between text-[11px] text-slate-400">
-            <span>Dine-In channel driving highest revenue</span>
+            <span>Dine-In channel driving customer experience</span>
             <span className="text-orange-400 font-semibold cursor-pointer hover:underline" onClick={() => setActiveView('tables')}>
               View Floor Plan →
             </span>

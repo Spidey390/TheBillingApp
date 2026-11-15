@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, Copy, Edit, Trash2, X, Utensils, Check } from 'lucide-react';
+import { Plus, Search, Copy, Edit, Lock, X, Utensils, Check } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export default function MenuCatalog() {
@@ -74,11 +74,6 @@ export default function MenuCatalog() {
     };
     setProducts([...products, copy]);
     showToast(`Duplicated ${p.name}`);
-  };
-
-  const handleDelete = (id) => {
-    setProducts(products.filter(p => p.id !== id));
-    showToast('Product deleted');
   };
 
   const handleSave = (e) => {
@@ -276,13 +271,12 @@ export default function MenuCatalog() {
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => handleDelete(p.id)}
-                          title="Delete Product"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-[#252f42] transition-colors"
+                        <span
+                          title="Menu items are protected and cannot be deleted"
+                          className="p-1.5 rounded-lg text-slate-600 cursor-not-allowed flex items-center justify-center"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                          <Lock className="w-3.5 h-3.5" />
+                        </span>
                       </div>
                     </td>
                   </tr>
