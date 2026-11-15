@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Search, 
-  Barcode, 
   UtensilsCrossed, 
   ShoppingBag, 
   Truck, 
@@ -51,7 +50,6 @@ export default function PosTerminal() {
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [barcodeInput, setBarcodeInput] = useState('');
   const [activeCategory, setActiveCategory] = useState('All Items');
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [noteText, setNoteText] = useState('');
@@ -67,28 +65,28 @@ export default function PosTerminal() {
     });
   }, [products, activeCategory, searchQuery]);
 
-  // Handle barcode scanning enter
-  const handleBarcodeSubmit = (e) => {
-    e.preventDefault();
-    if (!barcodeInput.trim()) return;
-    const found = products.find(p => p.barcode === barcodeInput.trim() || p.sku.toLowerCase() === barcodeInput.trim().toLowerCase());
-    if (found) {
-      if (found.hasSizes) {
-        openModal('customization', found);
-      } else {
-        addToCart(found);
-      }
-      setBarcodeInput('');
-    } else {
-      showToast(`Item with code "${barcodeInput}" not found`, 'warning');
-    }
-  };
-
   const handleProductClick = (product) => {
     if (product.hasSizes) {
       openModal('customization', product);
     } else {
       addToCart(product);
+    }
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      e.preventDefault();
+      const exactMatch = products.find(p => 
+        p.barcode === searchQuery.trim() || 
+        p.sku.toLowerCase() === searchQuery.trim().toLowerCase()
+      );
+      if (exactMatch) {
+        handleProductClick(exactMatch);
+        setSearchQuery('');
+      } else if (filteredProducts.length === 1) {
+        handleProductClick(filteredProducts[0]);
+        setSearchQuery('');
+      }
     }
   };
 
@@ -326,8 +324,8 @@ export default function PosTerminal() {
       <div className="flex-1 min-h-0 min-w-0 flex flex-col border-r border-[#1f2735] overflow-hidden">
         {/* Top Control Bar */}
         <div className="p-2 sm:p-2.5 bg-[#131720] border-b border-[#212837] flex flex-wrap items-center justify-between gap-2 shrink-0">
-          {/* Search Inputs */}
-          <div className="flex items-center space-x-2 flex-1 min-w-[180px] sm:min-w-[220px]">
+          {/* Search Input */}
+          <div className="flex items-center space-x-2 flex-1 min-w-[180px] sm:min-w-[240px]">
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -335,6 +333,7 @@ export default function PosTerminal() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 placeholder="Search product (F2)..."
                 className="w-full bg-[#1b2230] text-xs text-white placeholder-slate-500 pl-9 pr-7 py-1.5 rounded-lg border border-[#2b3547] focus:outline-none focus:border-orange-500 transition-colors"
               />
@@ -347,17 +346,6 @@ export default function PosTerminal() {
                 </button>
               )}
             </div>
-
-            <form onSubmit={handleBarcodeSubmit} className="relative w-32 hidden md:block">
-              <Barcode className="w-4 h-4 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={barcodeInput}
-                onChange={(e) => setBarcodeInput(e.target.value)}
-                placeholder="Barcode..."
-                className="w-full bg-[#1b2230] text-xs text-white placeholder-slate-500 pl-8 pr-2 py-1.5 rounded-lg border border-[#2b3547] focus:outline-none focus:border-orange-500 transition-colors"
-              />
-            </form>
           </div>
 
           {/* Shortcut Keys Indicators (Visible on 2xl only) */}
@@ -372,36 +360,36 @@ export default function PosTerminal() {
           <div className="flex items-center bg-[#181e2b] p-0.5 rounded-lg border border-[#283245] shrink-0">
             <button
               onClick={() => { setOrderChannel('Dine-In'); triggerAudio('beep'); }}
-              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
+              className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
                 orderChannel === 'Dine-In'
                   ? 'bg-orange-500 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <UtensilsCrossed className="w-3 h-3" />
+              <UtensilsCrossed className="w-3.5 h-3.5" />
               <span>Dine-In</span>
             </button>
             <button
               onClick={() => { setOrderChannel('Takeaway'); triggerAudio('beep'); }}
-              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
+              className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
                 orderChannel === 'Takeaway'
                   ? 'bg-orange-500 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <ShoppingBag className="w-3 h-3" />
-              <span className="hidden xs:inline">Takeaway</span>
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Takeaway</span>
             </button>
             <button
               onClick={() => { setOrderChannel('Delivery'); triggerAudio('beep'); }}
-              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
+              className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
                 orderChannel === 'Delivery'
                   ? 'bg-orange-500 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Truck className="w-3 h-3" />
-              <span className="hidden xs:inline">Delivery</span>
+              <Truck className="w-3.5 h-3.5" />
+              <span>Delivery</span>
             </button>
           </div>
 
