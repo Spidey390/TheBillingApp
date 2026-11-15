@@ -138,9 +138,6 @@ export default function ReceiptModal() {
                       <div>
                         <div>{it.name}</div>
                         {it.variant && <div className="text-[10px] text-slate-600">[{it.variant}]</div>}
-                        {it.addons && it.addons.length > 0 && (
-                          <div className="text-[10px] text-slate-600">+{it.addons.join(', ')}</div>
-                        )}
                         {it.note && <div className="text-[10px] text-red-600 font-bold">* NOTE: {it.note}</div>}
                       </div>
                       <span className="text-sm font-black ml-2">{it.quantity}</span>
@@ -198,9 +195,6 @@ export default function ReceiptModal() {
                       </div>
                       {it.variant && (
                         <div className="text-[9px] text-slate-600 pl-1">[{it.variant}]</div>
-                      )}
-                      {it.addons && it.addons.length > 0 && (
-                        <div className="text-[9px] text-slate-600 pl-1">+{it.addons.join(', ')}</div>
                       )}
                     </div>
                   ))}

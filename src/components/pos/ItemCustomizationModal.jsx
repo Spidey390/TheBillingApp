@@ -1,34 +1,23 @@
 import React, { useState } from 'react';
-import { X, Check } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export default function ItemCustomizationModal() {
-  const { modalData, closeModal, addToCart, addons } = useApp();
+  const { modalData, closeModal, addToCart } = useApp();
   const product = modalData;
 
   if (!product) return null;
 
-  // Defaults
+  // Defaults to first size variant
   const [selectedVariant, setSelectedVariant] = useState(
-    product.sizes && product.sizes.length > 1 ? product.sizes[1] : (product.sizes?.[0] || null) // defaults to Large if available like screenshot
+    product.sizes?.[0] || null
   );
-  const [selectedAddons, setSelectedAddons] = useState([addons[0]]); // defaults to Extra Melted Cheese (+₹30) like screenshot
   const [instruction, setInstruction] = useState('');
 
-  const toggleAddon = (addon) => {
-    if (selectedAddons.some(a => a.id === addon.id)) {
-      setSelectedAddons(selectedAddons.filter(a => a.id !== addon.id));
-    } else {
-      setSelectedAddons([...selectedAddons, addon]);
-    }
-  };
-
-  const basePrice = selectedVariant ? selectedVariant.price : product.price;
-  const addonTotal = selectedAddons.reduce((sum, a) => sum + a.price, 0);
-  const currentTotal = basePrice + addonTotal;
+  const currentPrice = selectedVariant ? selectedVariant.price : product.price;
 
   const handleAdd = () => {
-    addToCart(product, selectedVariant, selectedAddons, instruction);
+    addToCart(product, selectedVariant, [], instruction);
     closeModal();
   };
 
@@ -61,7 +50,7 @@ export default function ItemCustomizationModal() {
           </div>
         </div>
 
-        {/* Scrollable Options */}
+        {/* Scrollable Options: Sizes / Variants & Kitchen Instruction only */}
         <div className="p-4 overflow-y-auto space-y-4 flex-1">
           {/* Sizes / Variants */}
           {product.sizes && product.sizes.length > 0 && (
@@ -77,7 +66,7 @@ export default function ItemCustomizationModal() {
                       key={size.name}
                       type="button"
                       onClick={() => setSelectedVariant(size)}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-semibold transition-all ${
+                      className={`flex items-center justify-between p-3 rounded-xl border text-xs font-semibold transition-all ${
                         isSelected
                           ? 'border-orange-500 bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/50'
                           : 'border-[#263143] bg-[#141923] text-slate-300 hover:bg-[#1a212e]'
@@ -92,55 +81,26 @@ export default function ItemCustomizationModal() {
             </div>
           )}
 
-          {/* Add-ons & Customizations */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-              Add-ons / Customizations
-            </label>
-            <div className="space-y-1.5 bg-[#141923] p-2 rounded-xl border border-[#232b3a]">
-              {addons.map((addon) => {
-                const isChecked = selectedAddons.some(a => a.id === addon.id);
-                return (
-                  <label
-                    key={addon.id}
-                    onClick={() => toggleAddon(addon)}
-                    className="flex items-center justify-between p-2 rounded-lg hover:bg-[#1b2230] cursor-pointer text-xs select-none transition-colors"
-                  >
-                    <div className="flex items-center space-x-2.5">
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                        isChecked ? 'bg-orange-500 border-orange-500 text-white' : 'border-[#38455c] bg-[#111620]'
-                      }`}>
-                        {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                      </div>
-                      <span className="text-slate-200">{addon.name}</span>
-                    </div>
-                    <span className="text-slate-400 font-mono text-[11px]">+₹{addon.price}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Special Instructions */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-              Special Instructions
+              Special Kitchen Instruction
             </label>
             <input
               type="text"
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               placeholder="e.g. Less sugar, extra hot, no onions"
-              className="w-full bg-[#141923] text-xs text-white placeholder-slate-500 px-3 py-2 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500 transition-colors"
+              className="w-full bg-[#141923] text-xs text-white placeholder-slate-500 px-3 py-2.5 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500 transition-colors"
             />
           </div>
         </div>
 
         {/* Modal Bottom Bar */}
-        <div className="p-4 bg-[#141924] border-t border-[#232b3a] flex items-center justify-between">
+        <div className="p-4 bg-[#141924] border-t border-[#232b3a] flex items-center justify-between shrink-0">
           <div>
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Item Price</span>
-            <span className="text-base font-black text-white font-mono">₹{currentTotal}</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Price</span>
+            <span className="text-lg font-black text-white font-mono">₹{currentPrice}</span>
           </div>
 
           <div className="flex items-center space-x-2">

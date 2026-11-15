@@ -160,11 +160,6 @@ export default function PosTerminal() {
                       Size: {item.variant}
                     </span>
                   )}
-                  {item.addons && item.addons.length > 0 && (
-                    <div className="text-[10px] text-emerald-400">
-                      {item.addons.map(a => `+${a}`).join(', ')}
-                    </div>
-                  )}
                   {item.note && (
                     <div className="text-[10px] text-amber-300 italic mt-0.5 flex items-center space-x-1">
                       <MessageSquare className="w-2.5 h-2.5" />
