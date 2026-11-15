@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, Copy, Edit, Lock, X, Utensils, Check } from 'lucide-react';
+import { Plus, Search, Copy, Edit, Lock, X, Utensils, Check, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export default function MenuCatalog() {

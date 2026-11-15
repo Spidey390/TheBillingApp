@@ -17,7 +17,8 @@ import {
   Store,
   LogOut,
   Sparkles,
-  Plus
+  Plus,
+  ShieldCheck
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
