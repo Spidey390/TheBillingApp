@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAnalytics, isSupported } from 'firebase/analytics';
 import { 
   getFirestore, 
   collection, 
@@ -13,7 +14,17 @@ import {
 
 const CONFIG_STORAGE_KEY = 'bb_firebase_config';
 
-// Load stored Firebase config or environment variables
+export const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY_HERE",
+  authDomain: "thebillingapp.firebaseapp.com",
+  projectId: "thebillingapp",
+  storageBucket: "thebillingapp.firebasestorage.app",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "1:YOUR_SENDER_ID:web:YOUR_APP_ID",
+  measurementId: "YOUR_MEASUREMENT_ID"
+};
+
+// Load stored Firebase config or environment variables, or default project
 export function getSavedFirebaseConfig() {
   try {
     const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
@@ -26,13 +37,14 @@ export function getSavedFirebaseConfig() {
       apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
       authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
       projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.appspot.com`,
+      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebasestorage.app`,
       messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-      appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
+      appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+      measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ''
     };
   }
 
-  return null;
+  return DEFAULT_FIREBASE_CONFIG;
 }
 
 export function saveFirebaseConfig(config) {
@@ -45,6 +57,7 @@ export function saveFirebaseConfig(config) {
 
 let appInstance = null;
 let dbInstance = null;
+let analyticsInstance = null;
 
 // Initialize Firebase App & Firestore with offline cache
 export function getFirebaseFirestore(customConfig = null) {
@@ -58,6 +71,17 @@ export function getFirebaseFirestore(customConfig = null) {
       appInstance = initializeApp(config);
     } else {
       appInstance = getApp();
+    }
+
+    // Safely initialize Analytics if supported in the current environment
+    if (typeof window !== 'undefined' && !analyticsInstance) {
+      isSupported().then((supported) => {
+        if (supported && appInstance) {
+          try {
+            analyticsInstance = getAnalytics(appInstance);
+          } catch (e) {}
+        }
+      }).catch(() => {});
     }
 
     if (!dbInstance) {
