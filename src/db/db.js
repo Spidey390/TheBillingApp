@@ -13,13 +13,19 @@ import {
   initialAuditLogs
 } from '../data/initialData';
 
-// Initialize Dexie Database
-export const db = new Dexie('CaffeFlowPOS_DB');
+// Safely delete legacy DB with conflicting schema
+try {
+  Dexie.delete('CaffeFlowPOS_DB').catch(() => {});
+} catch (e) {}
+
+// Initialize Dexie Database with unique database name
+export const db = new Dexie('BrewBitePOS_DB_v2');
 
 // Define database schema
+// Note: store is named 'diningTables' because 'tables' is a reserved property on Dexie instance (Dexie.prototype.tables: Table[])
 db.version(1).stores({
   settings: 'id',
-  tables: 'id, status, floor, seats',
+  diningTables: 'id, status, floor, seats',
   products: 'id, category, sku, barcode, name, price',
   rawMaterials: 'id, code, category, status, currentStock',
   customers: 'id, phone, name, ordersCount, totalSpent',
@@ -33,14 +39,18 @@ db.version(1).stores({
 
 // Enable browser persistent storage permission
 export async function requestPersistentStorage() {
-  if (navigator.storage && navigator.storage.persist) {
-    const isPersisted = await navigator.storage.persisted();
-    if (!isPersisted) {
-      const granted = await navigator.storage.persist();
-      console.log(`[IndexedDB Storage] Persistent storage granted: ${granted}`);
-      return granted;
+  if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) {
+    try {
+      const isPersisted = await navigator.storage.persisted();
+      if (!isPersisted) {
+        const granted = await navigator.storage.persist();
+        console.log(`[IndexedDB Storage] Persistent storage granted: ${granted}`);
+        return granted;
+      }
+      return isPersisted;
+    } catch (e) {
+      return false;
     }
-    return isPersisted;
   }
   return false;
 }
@@ -57,7 +67,7 @@ export async function initializeDatabase() {
       
       await db.transaction('rw', [
         db.settings,
-        db.tables,
+        db.diningTables,
         db.products,
         db.rawMaterials,
         db.customers,
@@ -72,7 +82,7 @@ export async function initializeDatabase() {
         await db.settings.put({ id: 'active_settings', ...initialSettings });
         
         // Seed Master Tables & Products & Raw Materials & Staff
-        await db.tables.bulkPut(initialTables);
+        await db.diningTables.bulkPut(initialTables);
         await db.products.bulkPut(initialProducts);
         await db.rawMaterials.bulkPut(initialRawMaterials);
         await db.staff.bulkPut(initialStaff);
@@ -105,7 +115,7 @@ export async function executeOrderTransaction({
     db.rawMaterials,
     db.auditLogs,
     db.customers,
-    db.tables
+    db.diningTables
   ], async () => {
     // 1. Put order
     await db.orders.put(order);
@@ -134,7 +144,7 @@ export async function executeOrderTransaction({
 
     // 5. Update table status
     if (tableUpdate) {
-      await db.tables.update(tableUpdate.id, { status: tableUpdate.status });
+      await db.diningTables.update(tableUpdate.id, { status: tableUpdate.status });
     }
 
     return order;
@@ -157,7 +167,7 @@ export async function exportDatabaseJSON() {
     auditLogs
   ] = await Promise.all([
     db.settings.toArray(),
-    db.tables.toArray(),
+    db.diningTables.toArray(),
     db.products.toArray(),
     db.rawMaterials.toArray(),
     db.customers.toArray(),
@@ -170,7 +180,7 @@ export async function exportDatabaseJSON() {
   ]);
 
   return {
-    database: 'CaffeFlowPOS_DB',
+    database: 'BrewBitePOS_DB_v2',
     version: 1,
     exportedAt: new Date().toISOString(),
     settings: settings[0] || initialSettings,
@@ -193,7 +203,7 @@ export async function importDatabaseJSON(data) {
 
   await db.transaction('rw', [
     db.settings,
-    db.tables,
+    db.diningTables,
     db.products,
     db.rawMaterials,
     db.customers,
@@ -205,7 +215,7 @@ export async function importDatabaseJSON(data) {
     db.auditLogs
   ], async () => {
     if (data.settings) await db.settings.put({ id: 'active_settings', ...data.settings });
-    if (data.tables) { await db.tables.clear(); await db.tables.bulkPut(data.tables); }
+    if (data.tables) { await db.diningTables.clear(); await db.diningTables.bulkPut(data.tables); }
     if (data.products) { await db.products.clear(); await db.products.bulkPut(data.products); }
     if (data.rawMaterials) { await db.rawMaterials.clear(); await db.rawMaterials.bulkPut(data.rawMaterials); }
     if (data.customers) { await db.customers.clear(); if (data.customers.length) await db.customers.bulkPut(data.customers); }
@@ -224,7 +234,7 @@ export async function importDatabaseJSON(data) {
 export async function resetDatabaseToCleanProduction() {
   await db.transaction('rw', [
     db.settings,
-    db.tables,
+    db.diningTables,
     db.products,
     db.rawMaterials,
     db.customers,
@@ -236,8 +246,8 @@ export async function resetDatabaseToCleanProduction() {
     db.auditLogs
   ], async () => {
     await db.settings.put({ id: 'active_settings', ...initialSettings });
-    await db.tables.clear();
-    await db.tables.bulkPut(initialTables);
+    await db.diningTables.clear();
+    await db.diningTables.bulkPut(initialTables);
     await db.products.clear();
     await db.products.bulkPut(initialProducts);
     await db.rawMaterials.clear();

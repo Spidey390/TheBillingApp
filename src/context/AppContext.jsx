@@ -82,7 +82,7 @@ export function AppProvider({ children }) {
           savedAudit
         ] = await Promise.all([
           db.settings.get('active_settings'),
-          db.tables.toArray(),
+          db.diningTables.toArray(),
           db.products.toArray(),
           db.rawMaterials.toArray(),
           db.customers.toArray(),
@@ -126,7 +126,7 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (isDbReady && tables?.length) {
-      db.tables.bulkPut(tables).catch(() => {});
+      db.diningTables.bulkPut(tables).catch(() => {});
     }
   }, [tables, isDbReady]);
 
