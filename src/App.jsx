@@ -97,31 +97,23 @@ export default function App() {
           </div>
         )}
 
-        {/* Dynamic View Area: Strictly Billing POS & Owner Hub */}
-        <main className={`flex-1 flex flex-col min-h-0 min-w-0 bg-[#0d1117] ${activeView === 'pos' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-          {activeView === 'pos' && <PosTerminal />}
-          {(activeView === 'owner' || activeView === 'dashboard') && <OwnerHub />}
-          {activeView === 'orders' && <OrdersKDS />}
-          {activeView === 'tables' && <TableManagement />}
-          {activeView === 'menu' && <MenuCatalog />}
-          {activeView === 'inventory' && <InventoryBOM />}
-          {activeView === 'customers' && <CustomerCRM />}
-          {activeView === 'suppliers' && <SuppliersPurchases />}
-          {activeView === 'expenses' && <ExpenseManagement />}
-          {activeView === 'reports' && <BusinessReportsGST />}
-          {activeView === 'staff' && <StaffPermissions />}
-          {activeView === 'settings' && <CafeSettings />}
+        {/* Dynamic View Area: Strictly Role-Based (Owner Hub vs Counter POS) */}
+        <main className={`flex-1 flex flex-col min-h-0 min-w-0 bg-[#0d1117] ${currentUser?.role === 'STAFF' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          {currentUser?.role === 'OWNER' ? (
+            <OwnerHub />
+          ) : (
+            <PosTerminal />
+          )}
         </main>
       </div>
 
       {/* Modals Layer */}
-      {activeModal === 'customization' && <ItemCustomizationModal />}
-      {activeModal === 'tableSelect' && <TableSelectModal />}
-      {activeModal === 'customerSelect' && <CustomerSelectModal />}
-      {activeModal === 'payment' && <PaymentModal />}
+      {currentUser?.role === 'STAFF' && activeModal === 'customization' && <ItemCustomizationModal />}
+      {currentUser?.role === 'STAFF' && activeModal === 'tableSelect' && <TableSelectModal />}
+      {currentUser?.role === 'STAFF' && activeModal === 'customerSelect' && <CustomerSelectModal />}
+      {currentUser?.role === 'STAFF' && activeModal === 'payment' && <PaymentModal />}
       {activeModal === 'receipt' && <ReceiptModal />}
-      {activeModal === 'landing' && <LandingFeaturesModal />}
-      {activeModal === 'shopManager' && <ShopManagementModal />}
+      {currentUser?.role === 'OWNER' && activeModal === 'shopManager' && <ShopManagementModal />}
 
       {/* Toast Notification */}
       {toast && (

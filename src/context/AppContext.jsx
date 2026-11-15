@@ -85,7 +85,25 @@ export function AppProvider({ children }) {
   };
 
   // Navigation & Responsive State
-  const [activeView, setActiveView] = useState('pos');
+  const [activeView, setActiveViewRaw] = useState(() => {
+    return currentUser?.role === 'OWNER' ? 'owner' : 'pos';
+  });
+
+  const setActiveView = (view) => {
+    if (currentUser?.role === 'OWNER') {
+      if (view === 'pos' || view === 'menu') {
+        showToast('Owner cannot make bills or manage menu.', 'warning');
+      }
+      setActiveViewRaw('owner');
+      return;
+    }
+    if (currentUser?.role === 'STAFF') {
+      setActiveViewRaw('pos');
+      return;
+    }
+    setActiveViewRaw(view);
+  };
+
   const [activeModal, setActiveModal] = useState(null);
   const [modalData, setModalData] = useState(null);
   const [toast, setToast] = useState(null);
@@ -100,13 +118,17 @@ export function AppProvider({ children }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [discountPercent, setDiscountPercent] = useState(0);
 
-  // Persist Current User
+  // Persist Current User & enforce view lock
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('bb_current_user', JSON.stringify(currentUser));
-      // If logged in as staff, lock active shop to staff's assigned shop
-      if (currentUser.role === 'STAFF' && currentUser.shopId) {
-        setActiveShopId(currentUser.shopId);
+      if (currentUser.role === 'OWNER') {
+        setActiveViewRaw('owner');
+      } else if (currentUser.role === 'STAFF') {
+        if (currentUser.shopId) {
+          setActiveShopId(currentUser.shopId);
+        }
+        setActiveViewRaw('pos');
       }
     } else {
       localStorage.removeItem('bb_current_user');
@@ -377,7 +399,7 @@ export function AppProvider({ children }) {
     ? expenses
     : expenses.filter(e => e.shopId === activeShopId || !e.shopId);
 
-  // Keyboard shortcut listener
+  // Keyboard shortcut listener (Billing shortcuts reserved for Staff)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
@@ -386,6 +408,16 @@ export function AppProvider({ children }) {
         }
         return;
       }
+
+      if (e.key === 'Escape') {
+        setActiveModal(null);
+        setIsMobileCartOpen(false);
+        setIsMobileMenuOpen(false);
+        return;
+      }
+
+      // POS shortcuts only available for Staff
+      if (currentUser?.role === 'OWNER') return;
 
       if (e.key === 'F1') {
         e.preventDefault();
@@ -405,16 +437,12 @@ export function AppProvider({ children }) {
       } else if (e.key === 'F8') {
         e.preventDefault();
         openModal('tableSelect');
-      } else if (e.key === 'Escape') {
-        setActiveModal(null);
-        setIsMobileCartOpen(false);
-        setIsMobileMenuOpen(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cart]);
+  }, [cart, currentUser]);
 
   // Cart Calculations
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -431,6 +459,10 @@ export function AppProvider({ children }) {
 
   // Cart Actions
   const addToCart = (product, variant = null, selectedAddons = [], note = '') => {
+    if (currentUser?.role === 'OWNER') {
+      showToast('Owner cannot make bills. Only staff can create orders.', 'warning');
+      return;
+    }
     triggerAudio('beep');
     const addonPrice = selectedAddons.reduce((sum, a) => sum + a.price, 0);
     const basePrice = variant ? variant.price : product.price;
@@ -507,6 +539,10 @@ export function AppProvider({ children }) {
 
   // Complete Order with Multi-Shop Association & ACID Dexie Transaction
   const completePayment = async (paymentMethod = 'UPI', amountReceived = null, referenceNo = '') => {
+    if (currentUser?.role === 'OWNER') {
+      showToast('Owner cannot make bills. Only staff can create invoices.', 'error');
+      return;
+    }
     if (cart.length === 0) return;
 
     // Resolve which shop this bill belongs to
@@ -742,9 +778,17 @@ export function AppProvider({ children }) {
     }
   };
 
-  // Menu items cannot be deleted
+  // Menu items cannot be deleted or managed by Owner
   const deleteProduct = () => {
     showToast('Menu items are protected and cannot be deleted', 'warning');
+  };
+
+  const updateProducts = (val) => {
+    if (currentUser?.role === 'OWNER') {
+      showToast('Owner cannot manage menu items.', 'warning');
+      return;
+    }
+    setProducts(val);
   };
 
   // Raw Material Stock Adjust with DB write
@@ -828,7 +872,7 @@ export function AppProvider({ children }) {
         setTables,
         categories: initialCategories,
         products,
-        setProducts,
+        setProducts: updateProducts,
         deleteProduct,
         rawMaterials,
         setRawMaterials,

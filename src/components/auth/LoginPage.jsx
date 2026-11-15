@@ -194,7 +194,7 @@ export default function LoginPage() {
                       <span>Owner: {ownerAccount.name}</span>
                     </div>
                     <div className="text-[11px] text-orange-400/90 mt-0.5">
-                      Full Enterprise Access • All {shops.length} Outlets Managed
+                      Multi-Outlet Supervision • All {shops.length} Outlets • Sales & Staff Only
                     </div>
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-orange-500/20 text-orange-400 border border-orange-500/40">

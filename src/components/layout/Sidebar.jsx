@@ -12,21 +12,20 @@ export default function Sidebar({ onNavigate }) {
 
   const isOwner = currentUser?.role === 'OWNER';
 
-  const menuItems = [
+  const menuItems = isOwner ? [
+    { 
+      id: 'owner', 
+      label: 'Owner Hub', 
+      subtitle: 'Shops, Sales & Staff',
+      icon: ShieldCheck 
+    }
+  ] : [
     { 
       id: 'pos', 
       label: 'Billing (POS)', 
       subtitle: activeShop?.name || 'Counter Billing',
       icon: Zap 
-    },
-    ...(isOwner ? [
-      { 
-        id: 'owner', 
-        label: 'Owner Hub', 
-        subtitle: 'Shops, Sales & Staff',
-        icon: ShieldCheck 
-      }
-    ] : [])
+    }
   ];
 
   const handleSelect = (id) => {

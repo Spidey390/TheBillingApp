@@ -238,8 +238,8 @@ export default function Navbar() {
 
       {/* Right: Actions, Mobile Cart Toggle & Profile */}
       <div className="flex items-center space-x-2 sm:space-x-2.5">
-        {/* Mobile/Tablet Cart Button */}
-        {activeView === 'pos' && (
+        {/* Mobile/Tablet Cart Button (Only for Staff during Billing) */}
+        {currentUser?.role === 'STAFF' && activeView === 'pos' && (
           <button
             onClick={() => setIsMobileCartOpen(true)}
             className="lg:hidden flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-orange-500 text-white shadow-md shadow-orange-500/20 transition-all active:scale-95"
@@ -250,34 +250,18 @@ export default function Navbar() {
           </button>
         )}
 
-        {/* Two Core Views: Billing & Owner */}
-        <div className="flex items-center space-x-1 bg-[#171d2a] p-1 rounded-xl border border-[#263246]">
-          <button
-            onClick={() => setActiveView('pos')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeView === 'pos'
-                ? 'bg-orange-500 text-white shadow-md shadow-orange-500/25'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
+        {/* Role Portal Indicator: Strictly Role-Separated */}
+        {currentUser?.role === 'OWNER' ? (
+          <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-orange-500/15 border border-orange-500/30 text-orange-400 text-xs font-black uppercase tracking-wider">
+            <ShieldCheck className="w-3.5 h-3.5 text-orange-400" />
+            <span>OWNER HUB</span>
+          </div>
+        ) : (
+          <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-orange-500 text-white shadow-md shadow-orange-500/25 text-xs font-bold">
             <Zap className="w-3.5 h-3.5 fill-current" />
-            <span>BILLING</span>
-          </button>
-
-          {currentUser?.role === 'OWNER' && (
-            <button
-              onClick={() => setActiveView('owner')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                activeView === 'owner'
-                  ? 'bg-orange-500 text-white shadow-md shadow-orange-500/25'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>OWNER</span>
-            </button>
-          )}
-        </div>
+            <span>BILLING (POS)</span>
+          </div>
+        )}
 
         {/* Fullscreen Toggle */}
         <button

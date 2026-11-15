@@ -17,7 +17,6 @@ import {
   Check, 
   Sparkles, 
   ShieldCheck, 
-  ArrowRight,
   Eye
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -206,14 +205,12 @@ export default function OwnerHub() {
           </div>
         </div>
 
-        {/* Quick Launch POS Billing Button */}
-        <button
-          onClick={() => setActiveView('pos')}
-          className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-lg shadow-orange-500/25 transition-all self-start md:self-auto active:scale-95"
-        >
-          <span>SWITCH TO BILLING POS</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
+        {/* Supervisory Status Badge */}
+        <div className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-[#1a2130] border border-[#2b374c] text-xs self-start md:self-auto">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-slate-300 font-bold">Owner Supervision Mode</span>
+          <span className="text-[10px] text-slate-500 font-normal hidden sm:inline">• Live Multi-Outlet Sync</span>
+        </div>
       </div>
 
       {/* 4 Navigation Subtabs */}
@@ -358,17 +355,14 @@ export default function OwnerHub() {
                   Click any invoice to view and reprint receipt
                 </p>
               </div>
-              <button
-                onClick={() => setActiveView('pos')}
-                className="text-xs font-bold text-orange-400 hover:text-orange-300"
-              >
-                + Punch New Bill (F4)
-              </button>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-[#10141d] px-2.5 py-1 rounded-lg border border-[#202737]">
+                Punched by Store Cashiers
+              </span>
             </div>
 
             {scopedOrders.length === 0 ? (
               <div className="py-16 text-center text-slate-500 text-xs">
-                No bills punched yet for this selection. Open the Billing tab to punch your first order!
+                No bills punched yet for this selection. Staff members at counter will appear here once orders are created.
               </div>
             ) : (
               <div className="overflow-x-auto">
