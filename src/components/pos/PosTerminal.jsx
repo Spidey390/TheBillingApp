@@ -66,7 +66,8 @@ export default function PosTerminal() {
   }, [products, activeCategory, searchQuery]);
 
   const handleProductClick = (product) => {
-    if (product.hasSizes) {
+    const hasProductAddons = (product.hasAddons && product.addons?.length > 0) || (product.addons?.length > 0);
+    if (product.hasSizes || hasProductAddons) {
       openModal('customization', product);
     } else {
       addToCart(product);
@@ -159,6 +160,11 @@ export default function PosTerminal() {
                     <span className="text-[10px] text-slate-400 block font-medium">
                       Size: {item.variant}
                     </span>
+                  )}
+                  {item.addons && item.addons.length > 0 && (
+                    <div className="text-[10px] text-emerald-400">
+                      {item.addons.map(a => `+${a}`).join(', ')}
+                    </div>
                   )}
                   {item.note && (
                     <div className="text-[10px] text-amber-300 italic mt-0.5 flex items-center space-x-1">
@@ -496,12 +502,16 @@ export default function PosTerminal() {
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                       </div>
 
-                      {/* Sizes badge */}
-                      {prod.hasSizes && (
+                      {/* Customization badge */}
+                      {prod.hasSizes ? (
                         <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[9px] font-bold text-amber-300 border border-amber-500/30">
                           {prod.sizes.length} Sizes
                         </div>
-                      )}
+                      ) : (prod.hasAddons && prod.addons?.length > 0) || prod.addons?.length > 0 ? (
+                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[9px] font-bold text-emerald-300 border border-emerald-500/30">
+                          Add-ons
+                        </div>
+                      ) : null}
 
                       {/* Stock badge */}
                       <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[9px] font-medium text-slate-300">

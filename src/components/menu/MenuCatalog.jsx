@@ -3,7 +3,7 @@ import { Plus, Search, Copy, Edit, Lock, X, Utensils, Check, Trash2 } from 'luci
 import { useApp } from '../../context/AppContext';
 
 export default function MenuCatalog() {
-  const { products, setProducts, categories, rawMaterials, showToast } = useApp();
+  const { products, setProducts, categories, rawMaterials, addons = [], showToast } = useApp();
 
   const [activeCategory, setActiveCategory] = useState('All Categories');
   const [search, setSearch] = useState('');
@@ -23,6 +23,8 @@ export default function MenuCatalog() {
     { name: 'Large', price: 160 }
   ]);
   const [hasSizes, setHasSizes] = useState(false);
+  const [hasAddons, setHasAddons] = useState(false);
+  const [formAddons, setFormAddons] = useState([]);
   const [selectedBOMs, setSelectedBOMs] = useState([]);
 
   const filteredProducts = useMemo(() => {
@@ -45,6 +47,8 @@ export default function MenuCatalog() {
     setFormDietary('Pure Veg');
     setFormStock('50');
     setHasSizes(false);
+    setHasAddons(false);
+    setFormAddons([]);
     setSelectedBOMs([]);
     setShowModal(true);
   };
@@ -60,6 +64,8 @@ export default function MenuCatalog() {
     setFormStock(String(p.stock));
     setHasSizes(!!p.hasSizes);
     setFormSizes(p.sizes || [{ name: 'Regular', price: p.price }]);
+    setHasAddons(!!(p.hasAddons || (p.addons && p.addons.length > 0)));
+    setFormAddons(p.addons || []);
     setSelectedBOMs(p.bom || []);
     setShowModal(true);
   };
@@ -94,6 +100,8 @@ export default function MenuCatalog() {
       image: editingProduct?.image || 'https://images.unsplash.com/photo-1541167760496-1628856ab772?w=500&auto=format&fit=crop&q=80',
       hasSizes,
       sizes: hasSizes ? formSizes : [],
+      hasAddons,
+      addons: hasAddons ? formAddons : [],
       bom: selectedBOMs
     };
 
@@ -437,6 +445,95 @@ export default function MenuCatalog() {
                     >
                       + Add Size Variant
                     </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Add-on Options / Customizations */}
+              <div className="p-3 bg-[#121620] rounded-xl border border-[#232b3a] space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-300 block text-xs">Product Add-ons & Extras</span>
+                    <span className="text-[10px] text-slate-400">Extra cheese, dips, shots, toppings etc.</span>
+                  </div>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={hasAddons}
+                      onChange={(e) => setHasAddons(e.target.checked)}
+                      className="rounded border-[#344157] text-orange-500 focus:ring-0"
+                    />
+                    <span className="text-[11px] text-slate-400 font-semibold">Enable Add-ons</span>
+                  </label>
+                </div>
+
+                {hasAddons && (
+                  <div className="space-y-2 pt-2">
+                    {formAddons.map((addon, idx) => (
+                      <div key={idx} className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={addon.name}
+                          onChange={(e) => {
+                            const updated = [...formAddons];
+                            updated[idx].name = e.target.value;
+                            setFormAddons(updated);
+                          }}
+                          placeholder="e.g. Extra Cheese / Dip / Shot"
+                          className="flex-1 bg-[#181e2b] text-white px-2.5 py-1.5 rounded-lg border border-[#263143] text-xs"
+                        />
+                        <div className="flex items-center space-x-1 w-24">
+                          <span className="text-slate-400 text-xs">₹</span>
+                          <input
+                            type="number"
+                            value={addon.price}
+                            onChange={(e) => {
+                              const updated = [...formAddons];
+                              updated[idx].price = Number(e.target.value);
+                              setFormAddons(updated);
+                            }}
+                            placeholder="Price"
+                            className="w-full bg-[#181e2b] text-white px-2 py-1.5 rounded-lg border border-[#263143] font-mono text-xs"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFormAddons(formAddons.filter((_, i) => i !== idx))}
+                          className="text-slate-500 hover:text-rose-400 p-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+
+                    <div className="flex items-center space-x-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setFormAddons([...formAddons, { id: 'add-' + Date.now(), name: 'Extra Topping', price: 30 }])}
+                        className="text-[11px] text-orange-400 hover:underline font-bold"
+                      >
+                        + Add Custom Add-on
+                      </button>
+
+                      {addons?.length > 0 && (
+                        <select
+                          onChange={(e) => {
+                            const found = addons.find(a => a.id === e.target.value);
+                            if (found && !formAddons.some(a => a.name === found.name)) {
+                              setFormAddons([...formAddons, { id: 'add-' + Date.now(), name: found.name, price: found.price }]);
+                            }
+                            e.target.value = '';
+                          }}
+                          className="bg-[#181e2b] text-[10px] text-slate-300 px-2 py-1 rounded border border-[#263143] ml-auto"
+                          defaultValue=""
+                        >
+                          <option value="" disabled>+ Pick Common Add-on...</option>
+                          {addons.map(a => (
+                            <option key={a.id} value={a.id}>{a.name} (+₹{a.price})</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
