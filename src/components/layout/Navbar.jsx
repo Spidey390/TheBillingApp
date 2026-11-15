@@ -249,19 +249,34 @@ export default function Navbar() {
           </button>
         )}
 
-        {/* POS Fast Button */}
-        <button
-          onClick={() => setActiveView('pos')}
-          className={`flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-            activeView === 'pos'
-              ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/25 ring-1 ring-orange-400'
-              : 'bg-orange-600/20 text-orange-400 hover:bg-orange-600/30 border border-orange-500/30'
-          }`}
-        >
-          <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current shrink-0" />
-          <span className="hidden sm:inline">POS BILLING</span>
-          <span className="sm:hidden">POS</span>
-        </button>
+        {/* Two Core Views: Billing & Owner */}
+        <div className="flex items-center space-x-1 bg-[#171d2a] p-1 rounded-xl border border-[#263246]">
+          <button
+            onClick={() => setActiveView('pos')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activeView === 'pos'
+                ? 'bg-orange-500 text-white shadow-md shadow-orange-500/25'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 fill-current" />
+            <span>BILLING</span>
+          </button>
+
+          {currentUser?.role === 'OWNER' && (
+            <button
+              onClick={() => setActiveView('owner')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeView === 'owner'
+                  ? 'bg-orange-500 text-white shadow-md shadow-orange-500/25'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>OWNER</span>
+            </button>
+          )}
+        </div>
 
         {/* Fullscreen Toggle */}
         <button

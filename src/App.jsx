@@ -5,6 +5,7 @@ import Navbar from './components/layout/Navbar';
 import Sidebar from './components/layout/Sidebar';
 import OperationsDashboard from './components/dashboard/OperationsDashboard';
 import PosTerminal from './components/pos/PosTerminal';
+import OwnerHub from './components/owner/OwnerHub';
 import OrdersKDS from './components/orders/OrdersKDS';
 import TableManagement from './components/tables/TableManagement';
 import MenuCatalog from './components/menu/MenuCatalog';
@@ -96,10 +97,10 @@ export default function App() {
           </div>
         )}
 
-        {/* Dynamic View Area: POS is strictly viewport-locked, other views scroll smoothly */}
+        {/* Dynamic View Area: Strictly Billing POS & Owner Hub */}
         <main className={`flex-1 flex flex-col min-h-0 min-w-0 bg-[#0d1117] ${activeView === 'pos' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-          {activeView === 'dashboard' && <OperationsDashboard />}
           {activeView === 'pos' && <PosTerminal />}
+          {(activeView === 'owner' || activeView === 'dashboard') && <OwnerHub />}
           {activeView === 'orders' && <OrdersKDS />}
           {activeView === 'tables' && <TableManagement />}
           {activeView === 'menu' && <MenuCatalog />}

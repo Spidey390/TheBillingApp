@@ -230,8 +230,10 @@ export function AppProvider({ children }) {
     setCurrentUser(staffMember);
     if (staffMember.role === 'STAFF' && staffMember.shopId) {
       setActiveShopId(staffMember.shopId);
+      setActiveView('pos'); // Jump straight into Billing
     } else {
       setActiveShopId('all');
+      setActiveView('owner'); // Jump straight into Owner Hub
     }
     showToast(`Welcome back, ${staffMember.name}!`);
     playSound('beep', settings.audioBeepsEnabled);

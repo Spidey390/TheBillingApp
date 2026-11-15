@@ -168,7 +168,7 @@ export default function LoginPage() {
                   }`}
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Owner / Admin</span>
+                  <span>Owner</span>
                 </button>
                 <button
                   type="button"
@@ -180,7 +180,7 @@ export default function LoginPage() {
                   }`}
                 >
                   <User className="w-4 h-4" />
-                  <span>Staff / Cashier</span>
+                  <span>Billing Staff</span>
                 </button>
               </div>
             </div>
