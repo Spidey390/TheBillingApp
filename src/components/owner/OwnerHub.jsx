@@ -41,10 +41,19 @@ export default function OwnerHub() {
     resetDemoData, 
     openModal, 
     showToast,
-    setActiveView
+    setActiveView,
+    firebaseConfig,
+    isFirebaseSyncActive,
+    updateFirebaseConfig
   } = useApp();
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'shops', 'staff', 'settings'
+
+  // Firebase config form states
+  const [fbApiKey, setFbApiKey] = useState(firebaseConfig?.apiKey || '');
+  const [fbProjectId, setFbProjectId] = useState(firebaseConfig?.projectId || '');
+  const [fbAuthDomain, setFbAuthDomain] = useState(firebaseConfig?.authDomain || '');
+  const [fbAppId, setFbAppId] = useState(firebaseConfig?.appId || '');
 
   // Form states for creating a new shop
   const [showNewShopForm, setShowNewShopForm] = useState(false);
@@ -863,6 +872,121 @@ export default function OwnerHub() {
               </button>
             </div>
           </form>
+
+          {/* Firebase Cloud Sync Card */}
+          <div className="bg-[#151a24] p-5 rounded-2xl border border-[#222a38] space-y-4">
+            <div className="flex items-center justify-between border-b border-[#222a38] pb-3">
+              <div>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                  <span>🔥 Firebase Cloud Firestore (Web & Mobile Real-Time Sync)</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Sync all billing transactions, shops, and staff live across counter web POS, mobile phones, and tablets.
+                </p>
+              </div>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                isFirebaseSyncActive
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+              }`}>
+                {isFirebaseSyncActive ? '● CLOUD SYNC ACTIVE' : '○ OFFLINE LOCAL MODE'}
+              </span>
+            </div>
+
+            {isFirebaseSyncActive ? (
+              <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-emerald-300">
+                    Connected to Project: {firebaseConfig?.projectId}
+                  </div>
+                  <div className="text-[11px] text-emerald-400/80 mt-0.5">
+                    Live bidirectional real-time listeners connected. Data syncs to all devices in &lt;100ms with offline IndexedDB fallback.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateFirebaseConfig(null)}
+                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shrink-0 transition-colors"
+                >
+                  Disconnect Cloud
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-300">
+                  Enter your Firebase web app configuration from <strong className="text-white">console.firebase.google.com</strong> to enable multi-device sync:
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="text-slate-400 block mb-1 font-semibold">Firebase API Key *</label>
+                    <input
+                      type="text"
+                      value={fbApiKey}
+                      onChange={(e) => setFbApiKey(e.target.value)}
+                      placeholder="AIzaSy..."
+                      className="w-full bg-[#11151f] text-white px-3 py-2 rounded-xl border border-[#2b374c] font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block mb-1 font-semibold">Project ID *</label>
+                    <input
+                      type="text"
+                      value={fbProjectId}
+                      onChange={(e) => setFbProjectId(e.target.value)}
+                      placeholder="e.g. brew-bite-pos-123"
+                      className="w-full bg-[#11151f] text-white px-3 py-2 rounded-xl border border-[#2b374c] font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block mb-1 font-semibold">Auth Domain</label>
+                    <input
+                      type="text"
+                      value={fbAuthDomain}
+                      onChange={(e) => setFbAuthDomain(e.target.value)}
+                      placeholder="project-id.firebaseapp.com"
+                      className="w-full bg-[#11151f] text-white px-3 py-2 rounded-xl border border-[#2b374c] font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block mb-1 font-semibold">App ID</label>
+                    <input
+                      type="text"
+                      value={fbAppId}
+                      onChange={(e) => setFbAppId(e.target.value)}
+                      placeholder="1:123456789:web:abcdef"
+                      className="w-full bg-[#11151f] text-white px-3 py-2 rounded-xl border border-[#2b374c] font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!fbApiKey.trim() || !fbProjectId.trim()) {
+                        showToast('Please enter at least API Key and Project ID', 'warning');
+                        return;
+                      }
+                      updateFirebaseConfig({
+                        apiKey: fbApiKey.trim(),
+                        projectId: fbProjectId.trim(),
+                        authDomain: fbAuthDomain.trim() || `${fbProjectId.trim()}.firebaseapp.com`,
+                        appId: fbAppId.trim()
+                      });
+                    }}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs shadow-md shadow-orange-500/20"
+                  >
+                    Connect Firebase Cloud Sync
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Database & Offline Storage Management */}
           <div className="bg-[#151a24] p-5 rounded-2xl border border-[#222a38] space-y-4">

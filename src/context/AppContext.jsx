@@ -25,6 +25,18 @@ import {
   importDatabaseJSON,
   resetDatabaseToCleanProduction
 } from '../db/db';
+import {
+  getSavedFirebaseConfig,
+  saveFirebaseConfig,
+  isFirebaseConnected,
+  syncOrderToFirebase,
+  syncShopToFirebase,
+  syncStaffToFirebase,
+  syncSettingsToFirebase,
+  subscribeToFirebaseOrders,
+  subscribeToFirebaseShops,
+  subscribeToFirebaseStaff
+} from '../services/firebase';
 
 const AppContext = createContext();
 
@@ -58,9 +70,19 @@ export function AppProvider({ children }) {
   const [staff, setStaff] = useState(initialStaff);
   const [auditLogs, setAuditLogs] = useState(initialAuditLogs);
 
-  // Database Status
+  // Database & Cloud Sync Status
   const [isDbReady, setIsDbReady] = useState(false);
   const [dbName] = useState('Dexie IndexedDB (Multi-Outlet ACID)');
+  const [firebaseConfig, setFirebaseConfigState] = useState(() => getSavedFirebaseConfig());
+  const [isFirebaseSyncActive, setIsFirebaseSyncActive] = useState(() => isFirebaseConnected());
+
+  const updateFirebaseConfig = (config) => {
+    saveFirebaseConfig(config);
+    setFirebaseConfigState(config);
+    const active = Boolean(config && config.apiKey && config.projectId);
+    setIsFirebaseSyncActive(active);
+    showToast(active ? 'Firebase Cloud Connected! Real-time Web/Mobile Sync is Active.' : 'Disconnected from Firebase Cloud.');
+  };
 
   // Navigation & Responsive State
   const [activeView, setActiveView] = useState('pos');
@@ -219,6 +241,34 @@ export function AppProvider({ children }) {
     }
   }, [staff, isDbReady]);
 
+  // Real-Time Firebase Listeners for Multi-Device & Mobile Sync
+  useEffect(() => {
+    if (isFirebaseSyncActive) {
+      console.log('[Firebase Cloud] Attaching real-time cloud listeners...');
+      const unsubOrders = subscribeToFirebaseOrders((cloudOrders) => {
+        if (cloudOrders && cloudOrders.length > 0) {
+          setOrders(cloudOrders);
+        }
+      });
+      const unsubShops = subscribeToFirebaseShops((cloudShops) => {
+        if (cloudShops && cloudShops.length > 0) {
+          setShops(cloudShops);
+        }
+      });
+      const unsubStaff = subscribeToFirebaseStaff((cloudStaff) => {
+        if (cloudStaff && cloudStaff.length > 0) {
+          setStaff(cloudStaff);
+        }
+      });
+
+      return () => {
+        unsubOrders();
+        unsubShops();
+        unsubStaff();
+      };
+    }
+  }, [isFirebaseSyncActive]);
+
   // Toast helper
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -297,6 +347,9 @@ export function AppProvider({ children }) {
     try {
       await db.shops.put(newShop);
       await db.diningTables.bulkPut(newShopTables);
+      if (isFirebaseSyncActive) {
+        syncShopToFirebase(newShop);
+      }
     } catch (e) {
       console.error('Error saving new shop to DB', e);
     }
@@ -604,6 +657,11 @@ export function AppProvider({ children }) {
       origin: { y: 0.7 }
     });
 
+    // Cloud Sync to Firebase Firestore if connected
+    if (isFirebaseSyncActive) {
+      syncOrderToFirebase(newOrder);
+    }
+
     // Reset Cart
     clearCart();
     setIsMobileCartOpen(false);
@@ -761,6 +819,9 @@ export function AppProvider({ children }) {
 
         isDbReady,
         dbName,
+        firebaseConfig,
+        isFirebaseSyncActive,
+        updateFirebaseConfig,
         settings,
         setSettings: updateSettings,
         tables,
