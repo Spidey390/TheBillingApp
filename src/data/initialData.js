@@ -26,18 +26,8 @@ export const initialSettings = {
   license: "Free Lifetime Edition"
 };
 
-export const initialTables = [
-  { id: 'T-01', name: 'Table 1 (Window)', floor: 'Main Floor', seats: 2, status: 'Available' },
-  { id: 'T-02', name: 'Table 2', floor: 'Main Floor', seats: 4, status: 'Available' },
-  { id: 'T-03', name: 'Table 3', floor: 'Main Floor', seats: 4, status: 'Available' },
-  { id: 'T-04', name: 'Table 4 (Booth)', floor: 'Main Floor', seats: 6, status: 'Available' },
-  { id: 'T-05', name: 'Table 5', floor: 'Main Floor', seats: 2, status: 'Available' },
-  { id: 'T-06', name: 'Table 6 (Balcony)', floor: 'Balcony Garden', seats: 4, status: 'Available' },
-  { id: 'T-07', name: 'Table 7 (Balcony)', floor: 'Balcony Garden', seats: 4, status: 'Available' },
-  { id: 'T-08', name: 'Table 8 (Lounge)', floor: 'Balcony Garden', seats: 8, status: 'Available' },
-  { id: 'T-09', name: 'Table 9 (Work Bar)', floor: 'Mezzanine', seats: 2, status: 'Available' },
-  { id: 'T-10', name: 'Table 10 (Work Bar)', floor: 'Mezzanine', seats: 2, status: 'Available' },
-];
+// Clean Production State: No default mock tables (tables and floor sections are added manually by the owner)
+export const initialTables = [];
 
 export const initialCategories = [
   'Coffee',
@@ -532,80 +522,32 @@ export const initialPurchases = [];
 export const initialExpenses = [];
 export const initialAuditLogs = [];
 
-export const initialShops = [
-  {
-    id: 'shop-1',
-    name: 'Brew & Bite - Indiranagar Flagship',
-    code: 'BLR-IND',
-    address: '#42, 100 Feet Road, Indiranagar',
-    city: 'Bengaluru',
-    state: 'Karnataka',
-    pincode: '560038',
-    phone: '+91 98765 43210',
-    gstin: '29AAAAA0000A1Z5',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    isActive: true,
-    isPrimary: true
-  },
-  {
-    id: 'shop-2',
-    name: 'Brew & Bite - Koramangala 5th Block',
-    code: 'BLR-KOR',
-    address: '#18, 80 Feet Road, Koramangala',
-    city: 'Bengaluru',
-    state: 'Karnataka',
-    pincode: '560095',
-    phone: '+91 98765 43211',
-    gstin: '29AAAAA0000A1Z5',
-    createdAt: '2026-02-15T00:00:00.000Z',
-    isActive: true,
-    isPrimary: false
-  }
-];
-
 export const initialStaff = [
   {
     id: 'stf-1',
     name: 'Rajesh Kumar (Owner)',
     email: 'admin@caffeflow.com',
-    role: 'OWNER',
-    designation: 'Enterprise Owner & Founder',
+    role: 'ADMIN',
     phone: '+91 98765 43210',
     pin: '1122',
-    shopId: null, // Access to all shops
     status: 'Active'
   },
   {
     id: 'stf-2',
-    name: 'Sunita Rao (Cashier)',
-    email: 'cashier@caffeflow.com',
+    name: 'Rohan Verma (Kitchen/Floor)',
+    email: 'staff@caffeflow.com',
     role: 'STAFF',
-    designation: 'Head Cashier',
-    phone: '+91 98765 43211',
-    pin: '3344',
-    shopId: 'shop-1',
+    phone: '+91 98765 43212',
+    pin: '5566',
     status: 'Active'
   },
   {
     id: 'stf-3',
-    name: 'Rohan Verma (Kitchen/Floor)',
-    email: 'rohan@caffeflow.com',
-    role: 'STAFF',
-    designation: 'Kitchen Lead / Barista',
-    phone: '+91 98765 43212',
-    pin: '5566',
-    shopId: 'shop-1',
-    status: 'Active'
-  },
-  {
-    id: 'stf-4',
-    name: 'Amit Patel (Cashier)',
-    email: 'amit@caffeflow.com',
-    role: 'STAFF',
-    designation: 'Counter Cashier',
-    phone: '+91 98765 43213',
-    pin: '7788',
-    shopId: 'shop-2',
+    name: 'Sunita Rao (Cashier)',
+    email: 'cashier@caffeflow.com',
+    role: 'CASHIER',
+    phone: '+91 98765 43211',
+    pin: '3344',
     status: 'Active'
   }
 ];
