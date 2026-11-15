@@ -532,32 +532,80 @@ export const initialPurchases = [];
 export const initialExpenses = [];
 export const initialAuditLogs = [];
 
+export const initialShops = [
+  {
+    id: 'shop-1',
+    name: 'Brew & Bite - Indiranagar Flagship',
+    code: 'BLR-IND',
+    address: '#42, 100 Feet Road, Indiranagar',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    pincode: '560038',
+    phone: '+91 98765 43210',
+    gstin: '29AAAAA0000A1Z5',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    isActive: true,
+    isPrimary: true
+  },
+  {
+    id: 'shop-2',
+    name: 'Brew & Bite - Koramangala 5th Block',
+    code: 'BLR-KOR',
+    address: '#18, 80 Feet Road, Koramangala',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    pincode: '560095',
+    phone: '+91 98765 43211',
+    gstin: '29AAAAA0000A1Z5',
+    createdAt: '2026-02-15T00:00:00.000Z',
+    isActive: true,
+    isPrimary: false
+  }
+];
+
 export const initialStaff = [
   {
     id: 'stf-1',
     name: 'Rajesh Kumar (Owner)',
     email: 'admin@caffeflow.com',
-    role: 'ADMIN',
+    role: 'OWNER',
+    designation: 'Enterprise Owner & Founder',
     phone: '+91 98765 43210',
     pin: '1122',
+    shopId: null, // Access to all shops
     status: 'Active'
   },
   {
     id: 'stf-2',
-    name: 'Rohan Verma (Kitchen/Floor)',
-    email: 'staff@caffeflow.com',
+    name: 'Sunita Rao (Cashier)',
+    email: 'cashier@caffeflow.com',
     role: 'STAFF',
-    phone: '+91 98765 43212',
-    pin: '5566',
+    designation: 'Head Cashier',
+    phone: '+91 98765 43211',
+    pin: '3344',
+    shopId: 'shop-1',
     status: 'Active'
   },
   {
     id: 'stf-3',
-    name: 'Sunita Rao (Cashier)',
-    email: 'cashier@caffeflow.com',
-    role: 'CASHIER',
-    phone: '+91 98765 43211',
-    pin: '3344',
+    name: 'Rohan Verma (Kitchen/Floor)',
+    email: 'rohan@caffeflow.com',
+    role: 'STAFF',
+    designation: 'Kitchen Lead / Barista',
+    phone: '+91 98765 43212',
+    pin: '5566',
+    shopId: 'shop-1',
+    status: 'Active'
+  },
+  {
+    id: 'stf-4',
+    name: 'Amit Patel (Cashier)',
+    email: 'amit@caffeflow.com',
+    role: 'STAFF',
+    designation: 'Counter Cashier',
+    phone: '+91 98765 43213',
+    pin: '7788',
+    shopId: 'shop-2',
     status: 'Active'
   }
 ];

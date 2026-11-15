@@ -3,7 +3,17 @@ import { Plus, Users, Zap, Trash2, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export default function TableManagement() {
-  const { tables, setTables, setSelectedTable, setActiveView, showToast, triggerAudio } = useApp();
+  const { 
+    tables, 
+    setTables, 
+    setSelectedTable, 
+    setActiveView, 
+    showToast, 
+    triggerAudio,
+    activeShopId,
+    activeShop,
+    shops
+  } = useApp();
 
   const [selectedFloor, setSelectedFloor] = useState('All');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -11,17 +21,23 @@ export default function TableManagement() {
   const [newName, setNewName] = useState('');
   const [newFloor, setNewFloor] = useState('Main Floor');
   const [newSeats, setNewSeats] = useState(4);
+  const [tableShopId, setTableShopId] = useState(activeShopId !== 'all' ? activeShopId : (shops[0]?.id || ''));
 
   const floors = ['All', 'Main Floor', 'Balcony Garden', 'Mezzanine'];
 
-  const filteredTables = selectedFloor === 'All'
+  // Multi-shop filtering
+  const shopTables = activeShopId === 'all'
     ? tables
-    : tables.filter(t => t.floor === selectedFloor);
+    : tables.filter(t => t.shopId === activeShopId || !t.shopId);
+
+  const filteredTables = selectedFloor === 'All'
+    ? shopTables
+    : shopTables.filter(t => t.floor === selectedFloor);
 
   // Counts
-  const availableCount = tables.filter(t => t.status === 'Available').length;
-  const occupiedCount = tables.filter(t => t.status === 'Occupied').length;
-  const reservedCount = tables.filter(t => t.status === 'Reserved').length;
+  const availableCount = shopTables.filter(t => t.status === 'Available').length;
+  const occupiedCount = shopTables.filter(t => t.status === 'Occupied').length;
+  const reservedCount = shopTables.filter(t => t.status === 'Reserved').length;
 
   const handleLaunchPOS = (table) => {
     triggerAudio('beep');
@@ -45,6 +61,7 @@ export default function TableManagement() {
     if (!newId || !newName) return;
     const tableObj = {
       id: newId.toUpperCase(),
+      shopId: tableShopId || (activeShopId !== 'all' ? activeShopId : shops[0]?.id),
       name: newName,
       floor: newFloor,
       seats: Number(newSeats) || 2,

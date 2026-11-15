@@ -10,31 +10,33 @@ import {
   initialPurchases,
   initialExpenses,
   initialStaff,
-  initialAuditLogs
+  initialAuditLogs,
+  initialShops
 } from '../data/initialData';
 
-// Safely delete legacy DB with conflicting schema
+// Safely delete legacy DBs if present
 try {
   Dexie.delete('CaffeFlowPOS_DB').catch(() => {});
+  Dexie.delete('BrewBitePOS_DB_v2').catch(() => {});
 } catch (e) {}
 
 // Initialize Dexie Database with unique database name
-export const db = new Dexie('BrewBitePOS_DB_v2');
+export const db = new Dexie('BrewBitePOS_DB_v3');
 
 // Define database schema
-// Note: store is named 'diningTables' because 'tables' is a reserved property on Dexie instance (Dexie.prototype.tables: Table[])
 db.version(1).stores({
   settings: 'id',
-  diningTables: 'id, status, floor, seats',
+  shops: 'id, name, code, city, isActive',
+  diningTables: 'id, shopId, status, floor, seats',
   products: 'id, category, sku, barcode, name, price',
-  rawMaterials: 'id, code, category, status, currentStock',
+  rawMaterials: 'id, shopId, code, category, status, currentStock',
   customers: 'id, phone, name, ordersCount, totalSpent',
-  orders: 'id, invoiceNo, tokenNo, createdAt, channel, tableId, status, paymentMethod, total',
+  orders: 'id, shopId, invoiceNo, tokenNo, createdAt, channel, tableId, status, paymentMethod, total',
   suppliers: 'id, name, phone, gstNumber',
-  purchases: 'id, poNumber, invoiceNo, supplierId, date, paymentStatus',
-  expenses: 'id, category, date, paymentMethod, amount',
-  staff: 'id, role, pin, status',
-  auditLogs: 'id, timestamp, type, itemType'
+  purchases: 'id, shopId, poNumber, invoiceNo, supplierId, date, paymentStatus',
+  expenses: 'id, shopId, category, date, paymentMethod, amount',
+  staff: 'id, shopId, role, pin, status',
+  auditLogs: 'id, shopId, timestamp, type, itemType'
 });
 
 // Enable browser persistent storage permission
@@ -67,6 +69,7 @@ export async function initializeDatabase() {
       
       await db.transaction('rw', [
         db.settings,
+        db.shops,
         db.diningTables,
         db.products,
         db.rawMaterials,
@@ -81,6 +84,9 @@ export async function initializeDatabase() {
         // Seed Master Config
         await db.settings.put({ id: 'active_settings', ...initialSettings });
         
+        // Seed Master Outlets/Shops
+        await db.shops.bulkPut(initialShops);
+
         // Seed Master Tables & Products & Raw Materials & Staff
         await db.diningTables.bulkPut(initialTables);
         await db.products.bulkPut(initialProducts);
@@ -95,7 +101,7 @@ export async function initializeDatabase() {
         if (initialExpenses.length > 0) await db.expenses.bulkPut(initialExpenses);
         if (initialAuditLogs.length > 0) await db.auditLogs.bulkPut(initialAuditLogs);
       });
-      console.log('[IndexedDB Storage] Database initialized successfully!');
+      console.log('[IndexedDB Storage] Multi-Shop Database initialized successfully!');
     }
   } catch (err) {
     console.error('[IndexedDB Storage] Error initializing Dexie database:', err);
@@ -155,6 +161,7 @@ export async function executeOrderTransaction({
 export async function exportDatabaseJSON() {
   const [
     settings,
+    shops,
     tables,
     products,
     rawMaterials,
@@ -167,6 +174,7 @@ export async function exportDatabaseJSON() {
     auditLogs
   ] = await Promise.all([
     db.settings.toArray(),
+    db.shops.toArray(),
     db.diningTables.toArray(),
     db.products.toArray(),
     db.rawMaterials.toArray(),
@@ -180,10 +188,11 @@ export async function exportDatabaseJSON() {
   ]);
 
   return {
-    database: 'BrewBitePOS_DB_v2',
+    database: 'BrewBitePOS_DB_v3',
     version: 1,
     exportedAt: new Date().toISOString(),
     settings: settings[0] || initialSettings,
+    shops,
     tables,
     products,
     rawMaterials,
@@ -203,6 +212,7 @@ export async function importDatabaseJSON(data) {
 
   await db.transaction('rw', [
     db.settings,
+    db.shops,
     db.diningTables,
     db.products,
     db.rawMaterials,
@@ -215,6 +225,7 @@ export async function importDatabaseJSON(data) {
     db.auditLogs
   ], async () => {
     if (data.settings) await db.settings.put({ id: 'active_settings', ...data.settings });
+    if (data.shops) { await db.shops.clear(); await db.shops.bulkPut(data.shops); }
     if (data.tables) { await db.diningTables.clear(); await db.diningTables.bulkPut(data.tables); }
     if (data.products) { await db.products.clear(); await db.products.bulkPut(data.products); }
     if (data.rawMaterials) { await db.rawMaterials.clear(); await db.rawMaterials.bulkPut(data.rawMaterials); }
@@ -234,6 +245,7 @@ export async function importDatabaseJSON(data) {
 export async function resetDatabaseToCleanProduction() {
   await db.transaction('rw', [
     db.settings,
+    db.shops,
     db.diningTables,
     db.products,
     db.rawMaterials,
@@ -246,6 +258,8 @@ export async function resetDatabaseToCleanProduction() {
     db.auditLogs
   ], async () => {
     await db.settings.put({ id: 'active_settings', ...initialSettings });
+    await db.shops.clear();
+    await db.shops.bulkPut(initialShops);
     await db.diningTables.clear();
     await db.diningTables.bulkPut(initialTables);
     await db.products.clear();

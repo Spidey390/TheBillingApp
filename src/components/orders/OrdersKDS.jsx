@@ -3,7 +3,7 @@ import { Search, Eye, Printer, Filter, CheckCircle2, Clock, AlertCircle } from '
 import { useApp } from '../../context/AppContext';
 
 export default function OrdersKDS() {
-  const { orders, setOrders, openModal, showToast } = useApp();
+  const { orders, setOrders, openModal, showToast, activeShopId, shops } = useApp();
 
   const [timeFilter, setTimeFilter] = useState('Today'); // 'Today', 'Yesterday', 'This Week', 'This Month', 'All'
   const [statusFilter, setStatusFilter] = useState('All'); // 'All', 'New', 'Preparing', 'Ready', 'Completed', 'Cancelled'
@@ -17,7 +17,12 @@ export default function OrdersKDS() {
   // Filter orders
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
-      // Time Filter (using 2026-10-07 as base anchor matching screenshots)
+      // Multi-Shop Filter
+      if (activeShopId !== 'all' && order.shopId && order.shopId !== activeShopId) {
+        return false;
+      }
+
+      // Time Filter
       if (timeFilter === 'Today') {
         const isToday = order.createdAt.startsWith('2026-10-07') || new Date(order.createdAt).toDateString() === new Date().toDateString();
         if (!isToday) return false;
@@ -196,6 +201,11 @@ export default function OrdersKDS() {
                         <div className="text-[10px] text-orange-400/90 font-medium">
                           {order.channel.toUpperCase()} {order.table ? `• ${order.table.toUpperCase()}` : ''}
                         </div>
+                        {activeShopId === 'all' && (
+                          <div className="text-[10px] text-amber-300 font-medium mt-0.5 truncate max-w-[160px]">
+                            📍 {order.shopName || shops.find(s => s.id === order.shopId)?.name || 'Outlet'}
+                          </div>
+                        )}
                       </td>
 
                       {/* Items */}

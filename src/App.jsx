@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from './context/AppContext';
+import LoginPage from './components/auth/LoginPage';
 import Navbar from './components/layout/Navbar';
 import Sidebar from './components/layout/Sidebar';
 import OperationsDashboard from './components/dashboard/OperationsDashboard';
@@ -22,17 +23,40 @@ import CustomerSelectModal from './components/pos/CustomerSelectModal';
 import PaymentModal from './components/pos/PaymentModal';
 import ReceiptModal from './components/receipt/ReceiptModal';
 import LandingFeaturesModal from './components/landing/LandingFeaturesModal';
+import ShopManagementModal from './components/shops/ShopManagementModal';
 
 import { CheckCircle2, AlertCircle, X } from 'lucide-react';
 
 export default function App() {
   const { 
+    currentUser,
     activeView, 
     activeModal, 
     toast,
     isMobileMenuOpen,
     setIsMobileMenuOpen
   } = useApp();
+
+  // If user is not logged in, show Auth Login Screen
+  if (!currentUser) {
+    return (
+      <>
+        <LoginPage />
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-[#1a2230] border border-[#2b374c] shadow-2xl text-xs font-bold text-white animate-in slide-in-from-bottom duration-200">
+            {toast.type === 'warning' ? (
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            ) : toast.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            )}
+            <span>{toast.message}</span>
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="h-screen h-[100dvh] w-screen overflow-hidden bg-[#0d1117] text-slate-100 flex flex-col font-sans select-none">
@@ -96,6 +120,7 @@ export default function App() {
       {activeModal === 'payment' && <PaymentModal />}
       {activeModal === 'receipt' && <ReceiptModal />}
       {activeModal === 'landing' && <LandingFeaturesModal />}
+      {activeModal === 'shopManager' && <ShopManagementModal />}
 
       {/* Toast Notification */}
       {toast && (

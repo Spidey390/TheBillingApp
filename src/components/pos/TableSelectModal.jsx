@@ -3,14 +3,18 @@ import { X, Users, MapPin } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export default function TableSelectModal() {
-  const { tables, selectedTable, setSelectedTable, closeModal, showToast, triggerAudio } = useApp();
+  const { tables, selectedTable, setSelectedTable, closeModal, showToast, triggerAudio, activeShopId } = useApp();
   const [selectedFloor, setSelectedFloor] = useState('All');
 
   const floors = ['All', 'Main Floor', 'Balcony Garden', 'Mezzanine'];
 
-  const filteredTables = selectedFloor === 'All'
+  const shopTables = activeShopId === 'all'
     ? tables
-    : tables.filter(t => t.floor === selectedFloor);
+    : tables.filter(t => t.shopId === activeShopId || !t.shopId);
+
+  const filteredTables = selectedFloor === 'All'
+    ? shopTables
+    : shopTables.filter(t => t.floor === selectedFloor);
 
   const handleSelect = (table) => {
     triggerAudio('beep');

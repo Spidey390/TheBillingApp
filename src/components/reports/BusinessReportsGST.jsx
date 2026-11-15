@@ -3,20 +3,31 @@ import { Printer, Download, IndianRupee, Percent, Wallet, TrendingDown } from 'l
 import { useApp } from '../../context/AppContext';
 
 export default function BusinessReportsGST() {
-  const { orders, expenses, products, showToast } = useApp();
+  const { orders, expenses, products, showToast, activeShopId, activeShop, shops } = useApp();
 
   const [dateRange, setDateRange] = useState('Today'); // 'Today', 'Last 7 Days', 'Last 30 Days', 'Custom Range'
 
   const ranges = ['Today', 'Last 7 Days', 'Last 30 Days', 'Custom Range'];
 
+  // Scope orders & expenses by active shop
+  const scopedOrders = useMemo(() => {
+    if (activeShopId === 'all') return orders;
+    return orders.filter(o => o.shopId === activeShopId || !o.shopId);
+  }, [orders, activeShopId]);
+
+  const scopedExpenses = useMemo(() => {
+    if (activeShopId === 'all') return expenses;
+    return expenses.filter(e => e.shopId === activeShopId || !e.shopId);
+  }, [expenses, activeShopId]);
+
   // Calculate matching stats strictly from real data
-  const completedOrders = orders.filter(o => o.status === 'Completed');
+  const completedOrders = scopedOrders.filter(o => o.status === 'Completed');
   const grossSales = completedOrders.reduce((s, o) => s + o.total, 0);
   const totalTax = completedOrders.reduce((s, o) => s + (o.cgst + o.sgst), 0);
   const cgstTotal = totalTax / 2;
   const sgstTotal = totalTax / 2;
   const taxableValue = Math.max(0, grossSales - totalTax);
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalExpenses = scopedExpenses.reduce((s, e) => s + e.amount, 0);
   const estimatedNetProfit = grossSales - totalExpenses;
 
   // Category breakdown aggregated dynamically from actual orders

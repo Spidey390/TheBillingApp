@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import {
   initialSettings,
+  initialShops,
   initialTables,
   initialCategories,
   initialProducts,
@@ -28,6 +29,22 @@ import {
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
+  // Authentication & Current User
+  // currentUser: { id, name, email, role: 'OWNER' | 'STAFF', designation, shopId, pin }
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('bb_current_user');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    // Default to initial owner for immediate development access
+    return initialStaff[0];
+  });
+
+  // Shops State
+  const [shops, setShops] = useState(initialShops);
+  // activeShopId: 'all' (only for OWNER) or specific shop ID e.g. 'shop-1'
+  const [activeShopId, setActiveShopId] = useState('all');
+
   // Master & Transactional State
   const [settings, setSettings] = useState(initialSettings);
   const [tables, setTables] = useState(initialTables);
@@ -43,7 +60,7 @@ export function AppProvider({ children }) {
 
   // Database Status
   const [isDbReady, setIsDbReady] = useState(false);
-  const [dbName] = useState('Dexie IndexedDB (Offline ACID)');
+  const [dbName] = useState('Dexie IndexedDB (Multi-Outlet ACID)');
 
   // Navigation & Responsive State
   const [activeView, setActiveView] = useState('pos');
@@ -61,6 +78,19 @@ export function AppProvider({ children }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [discountPercent, setDiscountPercent] = useState(0);
 
+  // Persist Current User
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('bb_current_user', JSON.stringify(currentUser));
+      // If logged in as staff, lock active shop to staff's assigned shop
+      if (currentUser.role === 'STAFF' && currentUser.shopId) {
+        setActiveShopId(currentUser.shopId);
+      }
+    } else {
+      localStorage.removeItem('bb_current_user');
+    }
+  }, [currentUser]);
+
   // Load from Dexie IndexedDB on startup
   useEffect(() => {
     async function loadFromDB() {
@@ -70,6 +100,7 @@ export function AppProvider({ children }) {
         // Read all tables from Dexie
         const [
           savedSettings,
+          savedShops,
           savedTables,
           savedProducts,
           savedRaw,
@@ -82,6 +113,7 @@ export function AppProvider({ children }) {
           savedAudit
         ] = await Promise.all([
           db.settings.get('active_settings'),
+          db.shops.toArray(),
           db.diningTables.toArray(),
           db.products.toArray(),
           db.rawMaterials.toArray(),
@@ -95,6 +127,7 @@ export function AppProvider({ children }) {
         ]);
 
         if (savedSettings) setSettings(savedSettings);
+        if (savedShops?.length) setShops(savedShops);
         if (savedTables?.length) setTables(savedTables);
         if (savedProducts?.length) setProducts(savedProducts);
         if (savedRaw?.length) setRawMaterials(savedRaw);
@@ -107,7 +140,7 @@ export function AppProvider({ children }) {
         if (savedAudit) setAuditLogs(savedAudit);
 
         setIsDbReady(true);
-        console.log('[Dexie IndexedDB] Successfully connected and loaded data.');
+        console.log('[Dexie IndexedDB] Multi-Outlet database loaded successfully.');
       } catch (err) {
         console.error('[Dexie IndexedDB] Error loading database:', err);
         setIsDbReady(true);
@@ -123,6 +156,12 @@ export function AppProvider({ children }) {
       db.settings.put({ id: 'active_settings', ...settings }).catch(() => {});
     }
   }, [settings, isDbReady]);
+
+  useEffect(() => {
+    if (isDbReady && shops?.length) {
+      db.shops.bulkPut(shops).catch(() => {});
+    }
+  }, [shops, isDbReady]);
 
   useEffect(() => {
     if (isDbReady && tables?.length) {
@@ -186,6 +225,103 @@ export function AppProvider({ children }) {
     setTimeout(() => setToast(null), 3000);
   };
 
+  // Auth Operations
+  const login = (staffMember) => {
+    setCurrentUser(staffMember);
+    if (staffMember.role === 'STAFF' && staffMember.shopId) {
+      setActiveShopId(staffMember.shopId);
+    } else {
+      setActiveShopId('all');
+    }
+    showToast(`Welcome back, ${staffMember.name}!`);
+    playSound('beep', settings.audioBeepsEnabled);
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+    clearCart();
+    showToast('Logged out successfully');
+  };
+
+  // Shop Switcher & Multi-Shop Operations
+  const switchShop = (shopId) => {
+    if (currentUser?.role === 'STAFF' && currentUser.shopId && currentUser.shopId !== shopId) {
+      showToast('Staff are restricted to their assigned outlet', 'warning');
+      return;
+    }
+    setActiveShopId(shopId);
+    const targetShop = shops.find(s => s.id === shopId);
+    if (shopId === 'all') {
+      showToast('Switched to Enterprise Consolidated View (All Shops)');
+    } else {
+      showToast(`Switched outlet to: ${targetShop ? targetShop.name : shopId}`);
+    }
+    playSound('beep', settings.audioBeepsEnabled);
+  };
+
+  const createShop = async (shopData) => {
+    const newShopId = 'shop-' + Date.now();
+    const newShop = {
+      id: newShopId,
+      name: shopData.name,
+      code: shopData.code || `BLR-${Math.floor(100 + Math.random() * 900)}`,
+      address: shopData.address || '',
+      city: shopData.city || 'Bengaluru',
+      state: shopData.state || 'Karnataka',
+      pincode: shopData.pincode || '560001',
+      phone: shopData.phone || settings.phone,
+      gstin: shopData.gstin || settings.gstin,
+      createdAt: new Date().toISOString(),
+      isActive: true,
+      isPrimary: false
+    };
+
+    // Create 6 default tables for this new shop
+    const newShopTables = [1, 2, 3, 4, 5, 6].map(num => ({
+      id: `T-${newShop.code}-${num < 10 ? '0' + num : num}`,
+      shopId: newShopId,
+      name: `Table ${num}`,
+      floor: 'Main Floor',
+      seats: num % 2 === 0 ? 4 : 2,
+      status: 'Available'
+    }));
+
+    const updatedShops = [...shops, newShop];
+    const updatedTables = [...tables, ...newShopTables];
+
+    setShops(updatedShops);
+    setTables(updatedTables);
+
+    try {
+      await db.shops.put(newShop);
+      await db.diningTables.bulkPut(newShopTables);
+    } catch (e) {
+      console.error('Error saving new shop to DB', e);
+    }
+
+    showToast(`New shop "${newShop.name}" created with 6 tables!`);
+    setActiveShopId(newShopId);
+  };
+
+  const activeShop = shops.find(s => s.id === activeShopId) || (activeShopId === 'all' ? { id: 'all', name: 'All Shops (Consolidated)' } : null);
+
+  // Scoped Data getters
+  const scopedOrders = (activeShopId === 'all')
+    ? orders
+    : orders.filter(o => o.shopId === activeShopId || !o.shopId);
+
+  const scopedTables = (activeShopId === 'all')
+    ? tables
+    : tables.filter(t => t.shopId === activeShopId || !t.shopId);
+
+  const scopedStaff = (activeShopId === 'all')
+    ? staff
+    : staff.filter(s => s.shopId === activeShopId || s.role === 'OWNER');
+
+  const scopedExpenses = (activeShopId === 'all')
+    ? expenses
+    : expenses.filter(e => e.shopId === activeShopId || !e.shopId);
+
   // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -245,7 +381,7 @@ export function AppProvider({ children }) {
     const basePrice = variant ? variant.price : product.price;
     const finalPrice = basePrice + addonPrice;
 
-    // Check if duplicate item exists with identical variant and addons
+    // Check duplicate
     const existingIndex = cart.findIndex(item => 
       item.productId === product.id &&
       item.variant === (variant ? variant.name : null) &&
@@ -314,17 +450,24 @@ export function AppProvider({ children }) {
     setModalData(null);
   };
 
-  // Complete Order with ACID Dexie Transaction
+  // Complete Order with Multi-Shop Association & ACID Dexie Transaction
   const completePayment = async (paymentMethod = 'UPI', amountReceived = null, referenceNo = '') => {
     if (cart.length === 0) return;
 
+    // Resolve which shop this bill belongs to
+    const targetShopId = (activeShopId !== 'all') ? activeShopId : (currentUser?.shopId || shops[0]?.id || 'shop-1');
+    const targetShopObj = shops.find(s => s.id === targetShopId) || shops[0];
+
     // Generate Invoice Number
     const nextOrderNum = orders.length + 1001;
-    const invoiceNo = `${settings.invoicePrefix}${nextOrderNum}`;
+    const prefix = targetShopObj?.code ? `${targetShopObj.code}-` : settings.invoicePrefix;
+    const invoiceNo = `${prefix}${nextOrderNum}`;
     const tokenNo = (orders.length % 99) + 101;
 
     const newOrder = {
       id: `ord-${Date.now()}`,
+      shopId: targetShopId,
+      shopName: targetShopObj?.name || settings.brandName,
       invoiceNo,
       tokenNo,
       createdAt: new Date().toISOString(),
@@ -356,7 +499,7 @@ export function AppProvider({ children }) {
       amountReceived: amountReceived || cartTotal,
       referenceNo,
       status: 'Completed',
-      cashierName: `${settings.ownerName} (Owner)`
+      cashierName: currentUser ? currentUser.name : `${settings.ownerName} (Owner)`
     };
 
     // Calculate BOM Deductions
@@ -388,6 +531,7 @@ export function AppProvider({ children }) {
 
               newAuditEntries.push({
                 id: 'log-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5),
+                shopId: targetShopId,
                 timestamp: new Date().toLocaleString(),
                 type: 'Recipe Deduction',
                 itemType: 'Raw Material',
@@ -395,7 +539,7 @@ export function AppProvider({ children }) {
                 previousStock: `${prev} ${bomItem.unit}`,
                 newStock: `${next} ${bomItem.unit}`,
                 notes: `Order ${invoiceNo}: ${cartItem.quantity}x ${cartItem.name} auto-deduction`,
-                user: settings.ownerName
+                user: currentUser ? currentUser.name : settings.ownerName
               });
             }
           });
@@ -446,8 +590,7 @@ export function AppProvider({ children }) {
         setTables(prev => prev.map(t => t.id === tableUpdate.id ? { ...t, status: 'Occupied' } : t));
       }
     } catch (err) {
-      console.error('[Dexie IndexedDB] Order transaction failed:', err);
-      // Fallback state update
+      console.error('[Dexie IndexedDB] Order transaction fallback:', err);
       setOrders([newOrder, ...orders]);
     }
 
@@ -465,7 +608,7 @@ export function AppProvider({ children }) {
 
     // Show Receipt Modal for this new order
     openModal('receipt', newOrder);
-    showToast(`Order ${invoiceNo} saved to IndexedDB & completed!`);
+    showToast(`Order ${invoiceNo} saved for ${targetShopObj?.name || 'Shop'}!`);
   };
 
   // Reset to Clean Production State (Zero Mock Data)
@@ -473,6 +616,7 @@ export function AppProvider({ children }) {
     try {
       await resetDatabaseToCleanProduction();
       setSettings(initialSettings);
+      setShops(initialShops);
       setTables(initialTables);
       setProducts(initialProducts);
       setRawMaterials(initialRawMaterials);
@@ -504,7 +648,7 @@ export function AppProvider({ children }) {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showToast('IndexedDB database backup JSON downloaded!');
+      showToast('Multi-Outlet database backup JSON downloaded!');
     } catch (err) {
       console.error('Export error:', err);
       showToast('Export failed', 'error');
@@ -519,6 +663,7 @@ export function AppProvider({ children }) {
       
       // Refresh memory state
       if (parsed.settings) setSettings(parsed.settings);
+      if (parsed.shops) setShops(parsed.shops);
       if (parsed.tables) setTables(parsed.tables);
       if (parsed.products) setProducts(parsed.products);
       if (parsed.rawMaterials) setRawMaterials(parsed.rawMaterials);
@@ -552,6 +697,7 @@ export function AppProvider({ children }) {
 
     const logEntry = {
       id: 'log-' + Date.now(),
+      shopId: activeShopId !== 'all' ? activeShopId : (shops[0]?.id || 'shop-1'),
       timestamp: new Date().toLocaleString(),
       type: changeQty >= 0 ? 'Stock Addition' : 'Manual Audit',
       itemType: 'Raw Material',
@@ -559,7 +705,7 @@ export function AppProvider({ children }) {
       previousStock: `${prev} ${raw.unit}`,
       newStock: `${next} ${raw.unit}`,
       notes: reason,
-      user: settings.ownerName
+      user: currentUser ? currentUser.name : settings.ownerName
     };
 
     try {
@@ -599,6 +745,18 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider
       value={{
+        currentUser,
+        login,
+        logout,
+
+        // Shops
+        shops,
+        setShops,
+        activeShopId,
+        activeShop,
+        switchShop,
+        createShop,
+
         isDbReady,
         dbName,
         settings,
@@ -626,6 +784,12 @@ export function AppProvider({ children }) {
         auditLogs,
         setAuditLogs,
         addons: initialAvailableAddons,
+
+        // Scoped Data
+        scopedOrders,
+        scopedTables,
+        scopedStaff,
+        scopedExpenses,
 
         activeView,
         setActiveView,
