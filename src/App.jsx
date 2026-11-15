@@ -23,21 +23,57 @@ import PaymentModal from './components/pos/PaymentModal';
 import ReceiptModal from './components/receipt/ReceiptModal';
 import LandingFeaturesModal from './components/landing/LandingFeaturesModal';
 
-import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle2, AlertCircle, X } from 'lucide-react';
 
 export default function App() {
-  const { activeView, activeModal, toast } = useApp();
+  const { 
+    activeView, 
+    activeModal, 
+    toast,
+    isMobileMenuOpen,
+    setIsMobileMenuOpen
+  } = useApp();
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-slate-100 flex flex-col font-sans">
-      {/* Top Navbar */}
+    <div className="h-screen h-[100dvh] w-screen overflow-hidden bg-[#0d1117] text-slate-100 flex flex-col font-sans select-none">
+      {/* Top Fixed Navbar */}
       <Navbar />
 
-      {/* Main Workspace with Sidebar */}
-      <div className="flex-1 flex overflow-hidden">
-        <Sidebar />
+      {/* Main Workspace with Responsive Sidebar */}
+      <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden relative">
+        {/* Desktop Sidebar */}
+        <div className="hidden md:flex shrink-0 h-full">
+          <Sidebar />
+        </div>
 
-        <main className="flex-1 flex flex-col overflow-y-auto bg-[#0d1117]">
+        {/* Mobile Slide-Over Sidebar Drawer */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden flex">
+            {/* Backdrop */}
+            <div 
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            />
+            {/* Drawer */}
+            <div className="relative w-64 max-w-[80vw] bg-[#10141d] h-full shadow-2xl flex flex-col z-10 border-r border-[#242c3d] animate-in slide-in-from-left duration-200">
+              <div className="p-3 border-b border-[#1f2737] flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Navigation Menu</span>
+                <button 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-1 rounded-lg hover:bg-[#1a2230] text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <Sidebar onNavigate={() => setIsMobileMenuOpen(false)} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic View Area: POS is strictly viewport-locked, other views scroll smoothly */}
+        <main className={`flex-1 flex flex-col min-h-0 min-w-0 bg-[#0d1117] ${activeView === 'pos' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           {activeView === 'dashboard' && <OperationsDashboard />}
           {activeView === 'pos' && <PosTerminal />}
           {activeView === 'orders' && <OrdersKDS />}

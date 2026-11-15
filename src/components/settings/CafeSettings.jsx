@@ -18,6 +18,7 @@ export default function CafeSettings() {
     setSettings, 
     resetDemoData, 
     exportDatabase, 
+    importDatabase,
     showToast,
     triggerAudio 
   } = useApp();
@@ -374,8 +375,40 @@ export default function CafeSettings() {
         {activeTab === 'backup' && (
           <div className="bg-[#171c26] p-6 rounded-2xl border border-[#232a39] space-y-5">
             <h2 className="text-xs font-bold text-white uppercase tracking-wider border-b border-[#232b3a] pb-3">
-              Database Backup, Offline Storage & Reset
+              Database Engine & Offline Storage Management
             </h2>
+
+            {/* Active Database Architecture Card */}
+            <div className="p-4 rounded-xl bg-[#121620] border border-[#232b3a] space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-800/60 flex items-center justify-center text-cyan-400">
+                    <Database className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-white">IndexedDB (Dexie.js v4) - Production Database</h3>
+                    <p className="text-[11px] text-cyan-300/80">100% Offline-First • ACID Transactional Engine</p>
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  ONLINE & PERSISTENT
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 text-[11px] text-slate-400 border-t border-[#1e2636]">
+                <div>
+                  <span className="block text-slate-500 text-[10px]">TRANSACTION SAFETY</span>
+                  <span className="font-semibold text-slate-200">ACID Atomic Rollback</span>
+                </div>
+                <div>
+                  <span className="block text-slate-500 text-[10px]">STORAGE QUOTA</span>
+                  <span className="font-semibold text-slate-200">Persistent (Up to 60% Disk)</span>
+                </div>
+                <div>
+                  <span className="block text-slate-500 text-[10px]">CLOUD EXPENSE</span>
+                  <span className="font-semibold text-emerald-400">₹0/mo Lifetime Free</span>
+                </div>
+              </div>
+            </div>
 
             <div className="space-y-4">
               {/* Export Full Database Backup */}
@@ -383,7 +416,7 @@ export default function CafeSettings() {
                 <div>
                   <h3 className="text-xs font-bold text-white">Export Full Database Backup</h3>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Downloads all orders, products, recipes, customers, inventory logs, and settings as a standalone JSON file.
+                    Downloads all orders, master menu, recipe BOMs, customers, purchases, expenses and settings as a standalone JSON backup.
                   </p>
                 </div>
                 <button
@@ -396,25 +429,59 @@ export default function CafeSettings() {
                 </button>
               </div>
 
-              {/* Reset Demo Data */}
+              {/* Import Database Backup */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#121620] border border-[#232b3a]">
+                <div>
+                  <h3 className="text-xs font-bold text-white">Restore Database From Backup</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Select a previously exported JSON backup file to restore into your local IndexedDB.
+                  </p>
+                </div>
+                <label className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-[#1e2636] hover:bg-[#283348] text-slate-200 font-bold text-xs border border-[#2e3b52] cursor-pointer transition-colors shrink-0">
+                  <Database className="w-4 h-4 text-orange-400" />
+                  <span>Choose Backup JSON</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const content = event.target?.result;
+                          if (content && typeof content === 'string') {
+                            if (confirm('Restoring this backup will replace current records. Proceed?')) {
+                              importDatabase(content);
+                            }
+                          }
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* Reset Database to Clean Production */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-rose-950/20 border border-rose-800/40">
                 <div>
-                  <h3 className="text-xs font-bold text-rose-300">Reset Demo Data</h3>
+                  <h3 className="text-xs font-bold text-rose-300">Reset to Clean Production (Zero Mock Data)</h3>
                   <p className="text-[11px] text-rose-400/80 mt-0.5">
-                    Resets orders and re-populates realistic Indian cafe menu items, tables, and stock.
+                    Resets database to clean state: clears all orders, customers, and expenses, while keeping protected cafe menu items.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('Are you sure you want to reset all data to default demo state?')) {
+                    if (confirm('Are you sure you want to reset the database to clean production state (zero mock data)?')) {
                       resetDemoData();
                     }
                   }}
                   className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-950 transition-colors shrink-0"
                 >
                   <RotateCcw className="w-4 h-4" />
-                  <span>Reset Demo</span>
+                  <span>Reset Database</span>
                 </button>
               </div>
             </div>

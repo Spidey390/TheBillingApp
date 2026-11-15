@@ -70,15 +70,15 @@ export default function PaymentModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-[#181e28] border border-[#2b3547] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="bg-[#181e28] border border-[#2b3547] rounded-2xl w-full max-w-md max-h-[92vh] overflow-hidden shadow-2xl flex flex-col">
         {/* Top Header */}
-        <div className="p-4 bg-[#141924] border-b border-[#232b3a] flex items-center justify-between">
+        <div className="p-3 sm:p-4 bg-[#141924] border-b border-[#232b3a] flex items-center justify-between shrink-0">
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               TOTAL PAYABLE
             </span>
-            <div className="text-2xl font-black text-white font-mono mt-0.5">
+            <div className="text-xl sm:text-2xl font-black text-white font-mono mt-0.5">
               ₹{cartTotal.toFixed(2)}
             </div>
           </div>
@@ -90,8 +90,8 @@ export default function PaymentModal() {
           </button>
         </div>
 
-        {/* Payment Modes Selector */}
-        <div className="p-4 space-y-4">
+        {/* Payment Modes Selector & Scrollable Body */}
+        <div className="p-3 sm:p-4 space-y-4 overflow-y-auto flex-1">
           <div>
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
               SELECT PAYMENT METHOD

@@ -16,65 +16,43 @@ import {
   initialAvailableAddons
 } from '../data/initialData';
 import { playSound } from '../utils/audio';
+import {
+  db,
+  initializeDatabase,
+  executeOrderTransaction,
+  exportDatabaseJSON,
+  importDatabaseJSON,
+  resetDatabaseToCleanProduction
+} from '../db/db';
 
 const AppContext = createContext();
 
-// Production keys (v2 - Clean Production State without mock transactions)
-const STORAGE_KEYS = {
-  SETTINGS: 'bb_pos_settings_v2',
-  TABLES: 'bb_pos_tables_v2',
-  PRODUCTS: 'bb_pos_products_v2',
-  RAW: 'bb_pos_raw_v2',
-  CUSTOMERS: 'bb_pos_customers_v2',
-  ORDERS: 'bb_pos_orders_v2',
-  SUPPLIERS: 'bb_pos_suppliers_v2',
-  PURCHASES: 'bb_pos_purchases_v2',
-  EXPENSES: 'bb_pos_expenses_v2',
-  STAFF: 'bb_pos_staff_v2',
-  AUDIT: 'bb_pos_audit_v2',
-};
-
-function loadStorage(key, fallback) {
-  try {
-    const saved = localStorage.getItem(key);
-    if (saved) return JSON.parse(saved);
-  } catch (e) {
-    console.error('Failed to load from localStorage', e);
-  }
-  return fallback;
-}
-
 export function AppProvider({ children }) {
-  // Clear any legacy mock data from v1 keys if present
-  useEffect(() => {
-    try {
-      const legacyKeys = [
-        'bb_pos_settings_v1', 'bb_pos_tables_v1', 'bb_pos_products_v1',
-        'bb_pos_raw_v1', 'bb_pos_customers_v1', 'bb_pos_orders_v1',
-        'bb_pos_suppliers_v1', 'bb_pos_purchases_v1', 'bb_pos_expenses_v1',
-        'bb_pos_staff_v1', 'bb_pos_audit_v1'
-      ];
-      legacyKeys.forEach(k => localStorage.removeItem(k));
-    } catch (e) {}
-  }, []);
+  // Master & Transactional State
+  const [settings, setSettings] = useState(initialSettings);
+  const [tables, setTables] = useState(initialTables);
+  const [products, setProducts] = useState(initialProducts);
+  const [rawMaterials, setRawMaterials] = useState(initialRawMaterials);
+  const [customers, setCustomers] = useState(initialCustomers);
+  const [orders, setOrders] = useState(initialOrders);
+  const [suppliers, setSuppliers] = useState(initialSuppliers);
+  const [purchases, setPurchases] = useState(initialPurchases);
+  const [expenses, setExpenses] = useState(initialExpenses);
+  const [staff, setStaff] = useState(initialStaff);
+  const [auditLogs, setAuditLogs] = useState(initialAuditLogs);
 
-  const [settings, setSettings] = useState(() => loadStorage(STORAGE_KEYS.SETTINGS, initialSettings));
-  const [tables, setTables] = useState(() => loadStorage(STORAGE_KEYS.TABLES, initialTables));
-  const [products, setProducts] = useState(() => loadStorage(STORAGE_KEYS.PRODUCTS, initialProducts));
-  const [rawMaterials, setRawMaterials] = useState(() => loadStorage(STORAGE_KEYS.RAW, initialRawMaterials));
-  const [customers, setCustomers] = useState(() => loadStorage(STORAGE_KEYS.CUSTOMERS, initialCustomers));
-  const [orders, setOrders] = useState(() => loadStorage(STORAGE_KEYS.ORDERS, initialOrders));
-  const [suppliers, setSuppliers] = useState(() => loadStorage(STORAGE_KEYS.SUPPLIERS, initialSuppliers));
-  const [purchases, setPurchases] = useState(() => loadStorage(STORAGE_KEYS.PURCHASES, initialPurchases));
-  const [expenses, setExpenses] = useState(() => loadStorage(STORAGE_KEYS.EXPENSES, initialExpenses));
-  const [staff, setStaff] = useState(() => loadStorage(STORAGE_KEYS.STAFF, initialStaff));
-  const [auditLogs, setAuditLogs] = useState(() => loadStorage(STORAGE_KEYS.AUDIT, initialAuditLogs));
+  // Database Status
+  const [isDbReady, setIsDbReady] = useState(false);
+  const [dbName] = useState('Dexie IndexedDB (Offline ACID)');
 
-  // Navigation State
+  // Navigation & Responsive State
   const [activeView, setActiveView] = useState('pos');
   const [activeModal, setActiveModal] = useState(null);
   const [modalData, setModalData] = useState(null);
   const [toast, setToast] = useState(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Cart State - Clean empty initial cart
   const [cart, setCart] = useState([]);
@@ -83,18 +61,124 @@ export function AppProvider({ children }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [discountPercent, setDiscountPercent] = useState(0);
 
-  // Auto-sync to localStorage
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); }, [settings]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.TABLES, JSON.stringify(tables)); }, [tables]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); }, [products]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.RAW, JSON.stringify(rawMaterials)); }, [rawMaterials]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers)); }, [customers]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders)); }, [orders]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers)); }, [suppliers]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases)); }, [purchases]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses)); }, [expenses]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(staff)); }, [staff]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.AUDIT, JSON.stringify(auditLogs)); }, [auditLogs]);
+  // Load from Dexie IndexedDB on startup
+  useEffect(() => {
+    async function loadFromDB() {
+      try {
+        await initializeDatabase();
+
+        // Read all tables from Dexie
+        const [
+          savedSettings,
+          savedTables,
+          savedProducts,
+          savedRaw,
+          savedCustomers,
+          savedOrders,
+          savedSuppliers,
+          savedPurchases,
+          savedExpenses,
+          savedStaff,
+          savedAudit
+        ] = await Promise.all([
+          db.settings.get('active_settings'),
+          db.tables.toArray(),
+          db.products.toArray(),
+          db.rawMaterials.toArray(),
+          db.customers.toArray(),
+          db.orders.reverse().sortBy('createdAt'),
+          db.suppliers.toArray(),
+          db.purchases.toArray(),
+          db.expenses.toArray(),
+          db.staff.toArray(),
+          db.auditLogs.reverse().sortBy('id')
+        ]);
+
+        if (savedSettings) setSettings(savedSettings);
+        if (savedTables?.length) setTables(savedTables);
+        if (savedProducts?.length) setProducts(savedProducts);
+        if (savedRaw?.length) setRawMaterials(savedRaw);
+        if (savedCustomers) setCustomers(savedCustomers);
+        if (savedOrders) setOrders(savedOrders);
+        if (savedSuppliers) setSuppliers(savedSuppliers);
+        if (savedPurchases) setPurchases(savedPurchases);
+        if (savedExpenses) setExpenses(savedExpenses);
+        if (savedStaff?.length) setStaff(savedStaff);
+        if (savedAudit) setAuditLogs(savedAudit);
+
+        setIsDbReady(true);
+        console.log('[Dexie IndexedDB] Successfully connected and loaded data.');
+      } catch (err) {
+        console.error('[Dexie IndexedDB] Error loading database:', err);
+        setIsDbReady(true);
+      }
+    }
+
+    loadFromDB();
+  }, []);
+
+  // Automatic Reactive Sync to Dexie IndexedDB
+  useEffect(() => {
+    if (isDbReady && settings) {
+      db.settings.put({ id: 'active_settings', ...settings }).catch(() => {});
+    }
+  }, [settings, isDbReady]);
+
+  useEffect(() => {
+    if (isDbReady && tables?.length) {
+      db.tables.bulkPut(tables).catch(() => {});
+    }
+  }, [tables, isDbReady]);
+
+  useEffect(() => {
+    if (isDbReady && products?.length) {
+      db.products.bulkPut(products).catch(() => {});
+    }
+  }, [products, isDbReady]);
+
+  useEffect(() => {
+    if (isDbReady && rawMaterials?.length) {
+      db.rawMaterials.bulkPut(rawMaterials).catch(() => {});
+    }
+  }, [rawMaterials, isDbReady]);
+
+  useEffect(() => {
+    if (isDbReady) {
+      db.customers.clear().then(() => {
+        if (customers.length > 0) db.customers.bulkPut(customers);
+      }).catch(() => {});
+    }
+  }, [customers, isDbReady]);
+
+  useEffect(() => {
+    if (isDbReady) {
+      db.suppliers.clear().then(() => {
+        if (suppliers.length > 0) db.suppliers.bulkPut(suppliers);
+      }).catch(() => {});
+    }
+  }, [suppliers, isDbReady]);
+
+  useEffect(() => {
+    if (isDbReady) {
+      db.purchases.clear().then(() => {
+        if (purchases.length > 0) db.purchases.bulkPut(purchases);
+      }).catch(() => {});
+    }
+  }, [purchases, isDbReady]);
+
+  useEffect(() => {
+    if (isDbReady) {
+      db.expenses.clear().then(() => {
+        if (expenses.length > 0) db.expenses.bulkPut(expenses);
+      }).catch(() => {});
+    }
+  }, [expenses, isDbReady]);
+
+  useEffect(() => {
+    if (isDbReady && staff?.length) {
+      db.staff.bulkPut(staff).catch(() => {});
+    }
+  }, [staff, isDbReady]);
 
   // Toast helper
   const showToast = (message, type = 'success') => {
@@ -132,6 +216,8 @@ export function AppProvider({ children }) {
         openModal('tableSelect');
       } else if (e.key === 'Escape') {
         setActiveModal(null);
+        setIsMobileCartOpen(false);
+        setIsMobileMenuOpen(false);
       }
     };
 
@@ -228,8 +314,8 @@ export function AppProvider({ children }) {
     setModalData(null);
   };
 
-  // Complete Order
-  const completePayment = (paymentMethod = 'UPI', amountReceived = null, referenceNo = '') => {
+  // Complete Order with ACID Dexie Transaction
+  const completePayment = async (paymentMethod = 'UPI', amountReceived = null, referenceNo = '') => {
     if (cart.length === 0) return;
 
     // Generate Invoice Number
@@ -273,18 +359,25 @@ export function AppProvider({ children }) {
       cashierName: `${settings.ownerName} (Owner)`
     };
 
-    // Update Raw Materials & Log Audit if Auto-BOM enabled
-    if (settings.autoBOMDeduction) {
-      const updatedRaw = [...rawMaterials];
-      const newAuditEntries = [];
+    // Calculate BOM Deductions
+    const rawDeductions = [];
+    const newAuditEntries = [];
+    let updatedRaw = [...rawMaterials];
 
+    if (settings.autoBOMDeduction) {
       cart.forEach(cartItem => {
         const prod = products.find(p => p.id === cartItem.productId);
         if (prod && prod.bom && prod.bom.length > 0) {
           prod.bom.forEach(bomItem => {
+            const deductQty = bomItem.qty * cartItem.quantity;
+            rawDeductions.push({
+              rawId: bomItem.rawId,
+              deductQty,
+              unit: bomItem.unit
+            });
+
             const rawIdx = updatedRaw.findIndex(r => r.id === bomItem.rawId);
             if (rawIdx > -1) {
-              const deductQty = bomItem.qty * cartItem.quantity;
               const prev = updatedRaw[rawIdx].currentStock;
               const next = Math.max(0, Number((prev - deductQty).toFixed(3)));
               updatedRaw[rawIdx] = {
@@ -308,37 +401,55 @@ export function AppProvider({ children }) {
           });
         }
       });
-
-      setRawMaterials(updatedRaw);
-      if (newAuditEntries.length > 0) {
-        setAuditLogs(prev => [...newAuditEntries, ...prev]);
-      }
     }
 
-    // Update Customer CRM
+    // Customer CRM Update
+    let customerUpdate = null;
     if (selectedCustomer) {
-      setCustomers(prev => prev.map(c => {
-        if (c.id === selectedCustomer.id || c.phone === selectedCustomer.phone) {
-          const updatedSpend = Number((c.totalSpent + cartTotal).toFixed(2));
-          const updatedVisits = c.ordersCount + 1;
-          return {
-            ...c,
-            ordersCount: updatedVisits,
-            totalSpent: updatedSpend,
-            avgOrderValue: Number((updatedSpend / updatedVisits).toFixed(1))
-          };
+      const updatedSpend = Number((selectedCustomer.totalSpent + cartTotal).toFixed(2));
+      const updatedVisits = selectedCustomer.ordersCount + 1;
+      customerUpdate = {
+        ...selectedCustomer,
+        ordersCount: updatedVisits,
+        totalSpent: updatedSpend,
+        avgOrderValue: Number((updatedSpend / updatedVisits).toFixed(1))
+      };
+    }
+
+    // Table Update
+    const tableUpdate = (selectedTable && orderChannel === 'Dine-In')
+      ? { id: selectedTable.id, status: 'Occupied' }
+      : null;
+
+    // Execute ACID Dexie Transaction
+    try {
+      await executeOrderTransaction({
+        order: newOrder,
+        rawDeductions,
+        auditLogs: newAuditEntries,
+        customerUpdate,
+        tableUpdate
+      });
+
+      // Update in-memory state
+      setOrders([newOrder, ...orders]);
+      if (settings.autoBOMDeduction) {
+        setRawMaterials(updatedRaw);
+        if (newAuditEntries.length > 0) {
+          setAuditLogs(prev => [...newAuditEntries, ...prev]);
         }
-        return c;
-      }));
+      }
+      if (customerUpdate) {
+        setCustomers(prev => prev.map(c => c.id === customerUpdate.id ? customerUpdate : c));
+      }
+      if (tableUpdate) {
+        setTables(prev => prev.map(t => t.id === tableUpdate.id ? { ...t, status: 'Occupied' } : t));
+      }
+    } catch (err) {
+      console.error('[Dexie IndexedDB] Order transaction failed:', err);
+      // Fallback state update
+      setOrders([newOrder, ...orders]);
     }
-
-    // Update Table status
-    if (selectedTable && orderChannel === 'Dine-In') {
-      setTables(prev => prev.map(t => t.id === selectedTable.id ? { ...t, status: 'Occupied' } : t));
-    }
-
-    // Save order
-    setOrders([newOrder, ...orders]);
 
     // Audio & Confetti
     triggerAudio('checkout');
@@ -350,55 +461,80 @@ export function AppProvider({ children }) {
 
     // Reset Cart
     clearCart();
+    setIsMobileCartOpen(false);
 
     // Show Receipt Modal for this new order
     openModal('receipt', newOrder);
-    showToast(`Order ${invoiceNo} completed successfully!`);
+    showToast(`Order ${invoiceNo} saved to IndexedDB & completed!`);
   };
 
   // Reset to Clean Production State (Zero Mock Data)
-  const resetDemoData = () => {
-    setSettings(initialSettings);
-    setTables(initialTables);
-    setProducts(initialProducts);
-    setRawMaterials(initialRawMaterials);
-    setCustomers([]);
-    setOrders([]);
-    setSuppliers([]);
-    setPurchases([]);
-    setExpenses([]);
-    setStaff(initialStaff);
-    setAuditLogs([]);
-    clearCart();
-    showToast('Reset to clean production state (Zero Mock Data)!');
+  const resetDemoData = async () => {
+    try {
+      await resetDatabaseToCleanProduction();
+      setSettings(initialSettings);
+      setTables(initialTables);
+      setProducts(initialProducts);
+      setRawMaterials(initialRawMaterials);
+      setCustomers([]);
+      setOrders([]);
+      setSuppliers([]);
+      setPurchases([]);
+      setExpenses([]);
+      setStaff(initialStaff);
+      setAuditLogs([]);
+      clearCart();
+      showToast('Database reset to clean production state (Zero Mock Data)!');
+    } catch (err) {
+      console.error('Reset error:', err);
+      showToast('Failed to reset database', 'error');
+    }
   };
 
-  // Export Database JSON
-  const exportDatabase = () => {
-    const data = {
-      settings,
-      tables,
-      products,
-      rawMaterials,
-      customers,
-      orders,
-      suppliers,
-      purchases,
-      expenses,
-      staff,
-      auditLogs,
-      exportedAt: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `brew-bite-pos-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Backup JSON downloaded!');
+  // Export Database JSON from IndexedDB
+  const exportDatabase = async () => {
+    try {
+      const data = await exportDatabaseJSON();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `brew-bite-pos-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('IndexedDB database backup JSON downloaded!');
+    } catch (err) {
+      console.error('Export error:', err);
+      showToast('Export failed', 'error');
+    }
+  };
+
+  // Import Database JSON into IndexedDB
+  const importDatabase = async (jsonString) => {
+    try {
+      const parsed = JSON.parse(jsonString);
+      await importDatabaseJSON(parsed);
+      
+      // Refresh memory state
+      if (parsed.settings) setSettings(parsed.settings);
+      if (parsed.tables) setTables(parsed.tables);
+      if (parsed.products) setProducts(parsed.products);
+      if (parsed.rawMaterials) setRawMaterials(parsed.rawMaterials);
+      if (parsed.customers) setCustomers(parsed.customers);
+      if (parsed.orders) setOrders(parsed.orders);
+      if (parsed.suppliers) setSuppliers(parsed.suppliers);
+      if (parsed.purchases) setPurchases(parsed.purchases);
+      if (parsed.expenses) setExpenses(parsed.expenses);
+      if (parsed.staff) setStaff(parsed.staff);
+      if (parsed.auditLogs) setAuditLogs(parsed.auditLogs);
+
+      showToast('IndexedDB restored from backup successfully!');
+    } catch (err) {
+      console.error('Import error:', err);
+      showToast('Failed to import database file: ' + err.message, 'error');
+    }
   };
 
   // Menu items cannot be deleted
@@ -406,46 +542,67 @@ export function AppProvider({ children }) {
     showToast('Menu items are protected and cannot be deleted', 'warning');
   };
 
-  // Raw Material Stock Adjust
-  const adjustRawStock = (rawId, changeQty, reason = 'Manual audit adjustment') => {
+  // Raw Material Stock Adjust with DB write
+  const adjustRawStock = async (rawId, changeQty, reason = 'Manual audit adjustment') => {
     const raw = rawMaterials.find(r => r.id === rawId);
     if (!raw) return;
     const prev = raw.currentStock;
     const next = Math.max(0, Number((prev + changeQty).toFixed(3)));
+    const newStatus = next <= raw.minThreshold ? 'Low Stock' : 'Sufficient';
+
+    const logEntry = {
+      id: 'log-' + Date.now(),
+      timestamp: new Date().toLocaleString(),
+      type: changeQty >= 0 ? 'Stock Addition' : 'Manual Audit',
+      itemType: 'Raw Material',
+      changeQty: `${changeQty >= 0 ? '+' : ''}${changeQty} ${raw.unit}`,
+      previousStock: `${prev} ${raw.unit}`,
+      newStock: `${next} ${raw.unit}`,
+      notes: reason,
+      user: settings.ownerName
+    };
+
+    try {
+      await db.transaction('rw', [db.rawMaterials, db.auditLogs], async () => {
+        await db.rawMaterials.update(rawId, {
+          currentStock: next,
+          status: newStatus
+        });
+        await db.auditLogs.put(logEntry);
+      });
+    } catch (err) {
+      console.error('Stock adjust DB error:', err);
+    }
 
     setRawMaterials(prevList => prevList.map(r => {
       if (r.id === rawId) {
-        return {
-          ...r,
-          currentStock: next,
-          status: next <= r.minThreshold ? 'Low Stock' : 'Sufficient'
-        };
+        return { ...r, currentStock: next, status: newStatus };
       }
       return r;
     }));
 
-    setAuditLogs(prev => [
-      {
-        id: 'log-' + Date.now(),
-        timestamp: new Date().toLocaleString(),
-        type: changeQty >= 0 ? 'Stock Addition' : 'Manual Audit',
-        itemType: 'Raw Material',
-        changeQty: `${changeQty >= 0 ? '+' : ''}${changeQty} ${raw.unit}`,
-        previousStock: `${prev} ${raw.unit}`,
-        newStock: `${next} ${raw.unit}`,
-        notes: reason,
-        user: settings.ownerName
-      },
-      ...prev
-    ]);
+    setAuditLogs(prev => [logEntry, ...prev]);
     showToast(`Stock updated for ${raw.name}`);
+  };
+
+  // Update Settings in DB
+  const updateSettings = async (newSettings) => {
+    setSettings(newSettings);
+    try {
+      await db.settings.put({ id: 'active_settings', ...newSettings });
+      showToast('Settings saved to database');
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+    }
   };
 
   return (
     <AppContext.Provider
       value={{
+        isDbReady,
+        dbName,
         settings,
-        setSettings,
+        setSettings: updateSettings,
         tables,
         setTables,
         categories: initialCategories,
@@ -478,6 +635,12 @@ export function AppProvider({ children }) {
         modalData,
         toast,
         showToast,
+        isSidebarCollapsed,
+        setIsSidebarCollapsed,
+        isMobileCartOpen,
+        setIsMobileCartOpen,
+        isMobileMenuOpen,
+        setIsMobileMenuOpen,
 
         cart,
         addToCart,
@@ -502,6 +665,7 @@ export function AppProvider({ children }) {
         completePayment,
         resetDemoData,
         exportDatabase,
+        importDatabase,
         adjustRawStock,
         triggerAudio
       }}
