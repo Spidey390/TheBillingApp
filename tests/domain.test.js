@@ -7,6 +7,7 @@ import { canOpen, homeView } from '../src/domain/access.js';
 import { isTableOccupied } from '../src/domain/tables.js';
 import { stores, validateBackup } from '../src/db/backup.js';
 import { sanitizeText, sanitizeNumber } from '../src/domain/sanitize.js';
+import { mergeSavedCategories } from '../src/domain/categories.js';
 
 test('new bills total menu prices less the rounded discount', () => {
   assert.deepEqual(calculateBill([{ price: 140, quantity: 2 }, { price: 260, quantity: 1 }], 10),
@@ -95,4 +96,10 @@ test('form input sanitization cleans control characters and enforces length boun
   assert.equal(sanitizeNumber('150.50', 0, 1000), 150.5);
   assert.equal(sanitizeNumber('-50', 0, 1000, 0), 0);
   assert.equal(sanitizeNumber('invalid', 0, 100, 10), 10);
+});
+
+test('categories are deduplicated case-insensitively and merged without defaults', () => {
+  assert.deepEqual(mergeSavedCategories([]), []);
+  assert.deepEqual(mergeSavedCategories(['Coffee', 'Tea'], ['coffee', 'Snacks', '  Tea  ']), ['Coffee', 'Tea', 'Snacks']);
+  assert.deepEqual(mergeSavedCategories(null, 'Bakery'), ['Bakery']);
 });

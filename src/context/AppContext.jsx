@@ -5,6 +5,7 @@ import { initialSettings, initialCategories } from '../data/initialData';
 import { playSound } from '../utils/audio';
 import { calculateBill, validateTender } from '../domain/billing';
 import { normalizePhone } from '../domain/customers';
+import { mergeSavedCategories } from '../domain/categories';
 import { newId } from '../domain/ids';
 import { canOpen, homeView } from '../domain/access';
 import {
@@ -66,6 +67,11 @@ export function AppProvider({ children, operator, signOut }) {
   const orderRows = useRows(workspace, 'orders', readsOrders, onReadError, bootAttempt);
   const orders = React.useMemo(() => [...orderRows].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [orderRows]);
   const expenses = useRows(workspace, 'expenses', (['expenses', 'dashboard'].includes(activeView) || (isOwner && activeView === 'reports')), onReadError, bootAttempt, isOwner ? undefined : operator.uid);
+  const categories = React.useMemo(() => {
+    const saved = mergeSavedCategories(settings.commonCategories || settings.categories);
+    const fromProducts = products.map(p => p.category);
+    return mergeSavedCategories(saved, fromProducts);
+  }, [settings.commonCategories, settings.categories, products]);
 
   const [toast, setToast] = useState(null);
   const toastTimeout = useRef();
@@ -428,7 +434,7 @@ export function AppProvider({ children, operator, signOut }) {
       dbStatus, isDbReady, dbName: 'Cloud Firestore', operator, isOwner, signOut,
       retryDatabase: () => { setDbStatus('loading'); setBootAttempt(attempt => attempt + 1); },
       settings, tables, products, customers, orders, expenses,
-      categories: initialCategories,
+      categories,
       setSettings: changes => commit(() => updateSettings(workspace, changes), 'Settings saved.'),
       createTable: table => commit(() => createTable(workspace, table), 'Table created.'),
       deleteTable: id => commit(() => deleteTable(workspace, id), 'Table removed.'),

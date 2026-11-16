@@ -7,6 +7,7 @@ import { brandingRef } from '../services/branding';
 import { newId } from '../domain/ids';
 import { normalizePhone } from '../domain/customers';
 import { mergeSavedAddons } from '../domain/addons';
+import { mergeSavedCategories } from '../domain/categories';
 import { stores, validateBackup } from './backup';
 import {
   initialSettings, initialTables, initialProducts,
@@ -254,12 +255,30 @@ export function saveUniqueRecord(workspace, name, record) {
       throw new Error(name === 'products' ? 'Another product uses this SKU or barcode.' : 'A customer already uses this number.');
     }
 
-    if (name === 'products' && record.hasAddons && record.addons?.length) {
-      const settingsRef = config(workspace);
-      const settings = (await transaction.get(settingsRef)).data();
-      const saved = mergeSavedAddons(settings?.commonAddons);
+    const cleanCat = (name === 'products' && typeof record.category === 'string') ? record.category.trim() : '';
+    const hasAddonUpdates = (name === 'products' && record.hasAddons && record.addons?.length);
+    const settingsRef = (hasAddonUpdates || cleanCat) ? config(workspace) : null;
+    const settingsSnap = settingsRef ? await transaction.get(settingsRef) : null;
+    const settingsData = settingsSnap?.data();
+
+    const settingsUpdates = {};
+    if (hasAddonUpdates) {
+      const saved = mergeSavedAddons(settingsData?.commonAddons);
       const merged = mergeSavedAddons(saved, record.addons);
-      if (merged.length > saved.length) transaction.update(settingsRef, { commonAddons: merged });
+      if (merged.length > saved.length) settingsUpdates.commonAddons = merged;
+    }
+
+    if (cleanCat) {
+      const saved = mergeSavedCategories(settingsData?.commonCategories || settingsData?.categories);
+      const merged = mergeSavedCategories(saved, [cleanCat]);
+      if (merged.length > saved.length) {
+        settingsUpdates.commonCategories = merged;
+        settingsUpdates.categories = merged;
+      }
+    }
+
+    if (settingsRef && Object.keys(settingsUpdates).length > 0) {
+      transaction.update(settingsRef, settingsUpdates);
     }
 
     const defaults = name === 'customers' ? { ordersCount: 0, totalSpent: 0, avgOrderValue: 0 } : {};

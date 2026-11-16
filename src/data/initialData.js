@@ -40,24 +40,14 @@ export const initialSettings = {
   allowStaffRefunds: false,
   gstRate: 0, // Retained for settings writes under existing Firestore rules.
   commonAddons: initialCommonAddons,
+  commonCategories: [],
   license: "Free Lifetime Edition"
 };
 
 // The owner adds tables during setup.
 export const initialTables = [];
 
-export const initialCategories = [
-  'Coffee',
-  'Tea & Chai',
-  'Cold Beverages',
-  'Burgers & Wraps',
-  'Pizza',
-  'Sandwiches',
-  'Pasta & Noodles',
-  'Snacks & Sides',
-  'Desserts & Bakes',
-  'Value Combos'
-];
+export const initialCategories = [];
 
 export const initialProducts = [];
 

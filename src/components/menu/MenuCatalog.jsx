@@ -65,7 +65,9 @@ export default function MenuCatalog() {
 
   // Form State for Create/Edit Modal
   const [formName, setFormName] = useState('');
-  const [formCategory, setFormCategory] = useState(categories[0]);
+  const [formCategory, setFormCategory] = useState('');
+  const [isNewCategory, setIsNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [formSellingPrice, setFormSellingPrice] = useState('');
   const [formCostPrice, setFormCostPrice] = useState('');
   const [formSku, setFormSku] = useState('');
@@ -114,7 +116,10 @@ export default function MenuCatalog() {
   const handleOpenCreate = () => {
     setEditingProduct(null);
     setFormName('');
-    setFormCategory(categories[0]);
+    const defaultCat = categories[0] || '';
+    setFormCategory(defaultCat);
+    setIsNewCategory(!defaultCat);
+    setNewCategoryName('');
     setFormSellingPrice('');
     setFormCostPrice('');
     setFormSku('');
@@ -130,7 +135,9 @@ export default function MenuCatalog() {
   const handleOpenEdit = (p) => {
     setEditingProduct(p);
     setFormName(p.name);
-    setFormCategory(p.category);
+    setFormCategory(p.category || '');
+    setIsNewCategory(false);
+    setNewCategoryName('');
     setFormSellingPrice(String(p.price));
     setFormCostPrice(String(p.costPrice ?? ''));
     setFormSku(p.sku || '');
@@ -174,10 +181,11 @@ export default function MenuCatalog() {
     const cleanName = sanitizeText(formName, 100);
     const cleanSku = sanitizeText(formSku, 50);
     const cleanBarcode = sanitizeText(barcode, 50);
-    if (!cleanName || !formSellingPrice || !Number.isFinite(price) || price < 0 ||
+    const cleanCategory = sanitizeText(isNewCategory || !categories.length ? newCategoryName : formCategory, 50);
+    if (!cleanName || !cleanCategory || !formSellingPrice || !Number.isFinite(price) || price < 0 ||
         !Number.isFinite(costPrice) || costPrice < 0 || !validOptions(sizes) || !validOptions(options) ||
         (hasSizes && !sizes.length)) {
-      showToast('Enter valid prices and give each size or add-on a distinct name.', 'error');
+      showToast('Enter valid product details, a category, prices, and options.', 'error');
       return;
     }
 
@@ -188,7 +196,7 @@ export default function MenuCatalog() {
     try {
       if (await saveProduct({
         id, name: cleanName, sku: cleanSku || id.toUpperCase(), barcode: cleanBarcode,
-        category: formCategory, price, costPrice, dietary: formDietary, hasSizes, sizes: cleanSizes,
+        category: cleanCategory, price, costPrice, dietary: formDietary, hasSizes, sizes: cleanSizes,
         hasAddons, addons: cleanOptions
       })) setShowModal(false);
     } finally {
@@ -358,14 +366,63 @@ export default function MenuCatalog() {
                       className="mt-1 w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143]" />
                   </label>
 
-                  <div>
-                    <label className="text-slate-400 block mb-1">Category</label>
-                    <Select
-                      label="Category"
-                      value={formCategory}
-                      onChange={setFormCategory}
-                      options={categories}
-                    />
+                  <div className="col-span-2 sm:col-span-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-slate-400 block text-xs font-semibold">Category *</label>
+                      {categories.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsNewCategory(prev => !prev);
+                            if (!isNewCategory) setNewCategoryName('');
+                          }}
+                          className="text-xs text-orange-400 hover:text-orange-300 font-semibold transition-colors"
+                        >
+                          {isNewCategory ? 'Choose saved' : '+ New category'}
+                        </button>
+                      )}
+                    </div>
+
+                    {isNewCategory || categories.length === 0 ? (
+                      <div>
+                        <input
+                          aria-label="New Category"
+                          type="text"
+                          maxLength={50}
+                          value={newCategoryName}
+                          onChange={e => {
+                            setNewCategoryName(e.target.value);
+                            setFormCategory(e.target.value);
+                          }}
+                          placeholder={categories.length === 0 ? "e.g. Coffee, Pizza, Bakery..." : "Enter category name"}
+                          required
+                          className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500 text-sm h-11"
+                        />
+                        {categories.length === 0 && (
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            No categories yet. Enter a category to create your first one.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <Select
+                        label="Category"
+                        value={formCategory}
+                        onChange={val => {
+                          if (val === '__new__') {
+                            setIsNewCategory(true);
+                            setNewCategoryName('');
+                            setFormCategory('');
+                          } else {
+                            setFormCategory(val);
+                          }
+                        }}
+                        options={[
+                          ...categories.map(c => ({ value: c, label: c })),
+                          { value: '__new__', label: '+ Add new category…' }
+                        ]}
+                      />
+                    )}
                   </div>
 
                   <div>
