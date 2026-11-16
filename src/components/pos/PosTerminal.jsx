@@ -92,8 +92,7 @@ export default function PosTerminal() {
     return products.filter(product => {
       const matchesCategory = activeCategory === allItems || product.category === activeCategory;
       const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (product.sku || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (product.barcode || '').includes(searchQuery);
+                            (product.sku || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
   }, [products, activeCategory, searchQuery]);
@@ -113,7 +112,7 @@ export default function PosTerminal() {
       e.preventDefault();
       const query = searchQuery.trim().toLowerCase();
       const matches = products.filter(product =>
-        product.barcode === query || product.sku?.toLowerCase() === query);
+        product.sku?.toLowerCase() === query || product.name.toLowerCase() === query);
       if (matches.length > 1) {
         showToast('Multiple products use this code. Select the intended product.', 'warning');
       } else if (matches.length === 1) {
@@ -380,7 +379,7 @@ export default function PosTerminal() {
           <div className="col-span-2 flex min-w-0 gap-2 sm:col-span-1">
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-              <input id="pos-search-input" aria-label="Search product, SKU or barcode" type="text"
+              <input id="pos-search-input" aria-label="Search products" type="text"
                 value={searchQuery} onChange={event => setSearchQuery(event.target.value)}
                 onKeyDown={handleSearchKeyDown} placeholder="Search"
                 className="h-11 w-full min-w-0 rounded-lg border border-[#2b3547] bg-[#1b2230] pl-9 pr-10 text-base text-white placeholder:text-slate-400 sm:text-sm" />

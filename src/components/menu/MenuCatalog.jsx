@@ -81,8 +81,6 @@ export default function MenuCatalog() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [formSellingPrice, setFormSellingPrice] = useState('');
   const [formCostPrice, setFormCostPrice] = useState('');
-  const [formSku, setFormSku] = useState('');
-  const [barcode, setBarcode] = useState('');
   const [formDietary, setFormDietary] = useState('Pure Veg');
   const [formSizes, setFormSizes] = useState([]);
   const [hasSizes, setHasSizes] = useState(false);
@@ -147,9 +145,7 @@ export default function MenuCatalog() {
     return products.filter(p => {
       const matchCat = activeCategory === allCategories ||
         (activeCategory === 'Uncategorized' ? !p.category : p.category === activeCategory);
-      const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-                          (p.sku || '').toLowerCase().includes(search.toLowerCase()) ||
-                          (p.barcode && p.barcode.includes(search));
+      const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
       return matchCat && matchSearch;
     });
   }, [products, activeCategory, search]);
@@ -163,8 +159,6 @@ export default function MenuCatalog() {
     setNewCategoryName('');
     setFormSellingPrice('');
     setFormCostPrice('');
-    setFormSku('');
-    setBarcode('');
     setFormDietary('Pure Veg');
     setHasSizes(false);
     setFormSizes([{ name: 'Regular', price: '' }]);
@@ -181,8 +175,6 @@ export default function MenuCatalog() {
     setNewCategoryName('');
     setFormSellingPrice(String(p.price));
     setFormCostPrice(String(p.costPrice ?? ''));
-    setFormSku(p.sku || '');
-    setBarcode(p.barcode || '');
     setFormDietary(p.dietary || 'Pure Veg');
     setHasSizes(!!p.hasSizes);
     setFormSizes(p.sizes || [{ name: 'Regular', price: p.price }]);
@@ -220,8 +212,6 @@ export default function MenuCatalog() {
     const validOptions = rows => rows.every(row => row.name && Number.isFinite(row.price) && row.price >= 0) &&
       new Set(rows.map(row => row.name.toLowerCase())).size === rows.length;
     const cleanName = sanitizeText(formName, 100);
-    const cleanSku = sanitizeText(formSku, 50);
-    const cleanBarcode = sanitizeText(barcode, 50);
     const cleanCategory = sanitizeText(isNewCategory || !categories.length ? newCategoryName : formCategory, 50);
     if (!cleanName || !cleanCategory || !formSellingPrice || !Number.isFinite(price) || price < 0 ||
         !Number.isFinite(costPrice) || costPrice < 0 || !validOptions(sizes) || !validOptions(options) ||
@@ -231,12 +221,13 @@ export default function MenuCatalog() {
     }
 
     const id = editingProduct?.id || `prod-${newId()}`;
+    const sku = editingProduct?.sku || `ITEM-${newId().slice(0, 8).toUpperCase()}`;
     const cleanSizes = sizes.map(s => ({ ...s, name: sanitizeText(s.name, 40) }));
     const cleanOptions = options.map(o => ({ ...o, name: sanitizeText(o.name, 40) }));
     setIsSaving(true);
     try {
       if (await saveProduct({
-        id, name: cleanName, sku: cleanSku || id.toUpperCase(), barcode: cleanBarcode,
+        id, name: cleanName, sku,
         category: cleanCategory, price, costPrice, dietary: formDietary, hasSizes, sizes: cleanSizes,
         hasAddons, addons: cleanOptions
       })) setShowModal(false);
@@ -332,9 +323,6 @@ export default function MenuCatalog() {
                           <div className="font-medium text-white transition-colors xl:font-bold xl:group-hover:text-orange-300">
                             {p.name}
                           </div>
-                          <div className="hidden text-[10px] text-slate-500 font-mono xl:block">
-                            {p.sku} • Barcode: {p.barcode}
-                          </div>
                         </div>
                       </div>
                     </td>
@@ -410,12 +398,7 @@ export default function MenuCatalog() {
                       className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500"
                     />
                   </div>
-                  <label className="block text-slate-300">Barcode
-                    <input type="text" maxLength={50} value={barcode} onChange={event => setBarcode(event.target.value)}
-                      className="mt-1 w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143]" />
-                  </label>
-
-                  <div className="col-span-2 sm:col-span-1">
+                  <div className="col-span-2">
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-slate-400 block text-xs font-semibold">Category *</label>
                       {categories.length > 0 && (
@@ -473,17 +456,6 @@ export default function MenuCatalog() {
                         ]}
                       />
                     )}
-                  </div>
-
-                  <div>
-                    <label className="text-slate-400 block mb-1">SKU / Item Code</label>
-                    <input aria-label="SKU / Item Code"
-                      type="text"
-                      maxLength={50}
-                      value={formSku}
-                      onChange={(e) => setFormSku(e.target.value)}
-                      className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none font-mono"
-                    />
                   </div>
 
                   <div>

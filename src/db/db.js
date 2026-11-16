@@ -49,7 +49,7 @@ export function watchRows(workspace, name, next, error, recordedBy) {
 
 const idKey = value => encodeURIComponent(value.trim().toLowerCase());
 const identityFor = {
-  products: record => [['sku', record?.sku], ['barcode', record?.barcode]],
+  products: record => [['sku', record?.sku]],
   customers: record => [['phone', record && normalizePhone(record.phone)]]
 };
 
@@ -252,7 +252,7 @@ export function saveUniqueRecord(workspace, name, record) {
     const removed = previous.filter(key => !keys.some(item => item.path === key.path));
     const checks = await Promise.all([...added, ...removed].map(key => transaction.get(key)));
     if (checks.slice(0, added.length).some(key => key.exists() && key.data().id !== record.id)) {
-      throw new Error(name === 'products' ? 'Another product uses this SKU or barcode.' : 'A customer already uses this number.');
+      throw new Error(name === 'products' ? 'Another product uses this item code.' : 'A customer already uses this number.');
     }
 
     const cleanCat = (name === 'products' && typeof record.category === 'string') ? record.category.trim() : '';
