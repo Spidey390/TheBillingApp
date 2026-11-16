@@ -434,6 +434,11 @@ export function AppProvider({ children, operator, signOut }) {
       deleteTable: id => commit(() => deleteTable(workspace, id), 'Table removed.'),
       saveProduct: product => commit(() => saveUniqueRecord(workspace, 'products', product), 'Product saved.'),
       deleteProduct: id => commit(() => deleteUniqueRecord(workspace, 'products', id), 'Product removed.'),
+      clearAllProducts: () => commit(async () => {
+        for (const product of products) {
+          await deleteUniqueRecord(workspace, 'products', product.id);
+        }
+      }, 'All menu products removed.'),
       saveCustomer, deleteCustomer: id => commit(() => deleteUniqueRecord(workspace, 'customers', id), 'Customer removed.'),
       saveExpense: record => commit(() => createExpense(workspace, { ...record, recordedBy: operator.uid, recordedByName: operator.name || operator.email }), 'Expense recorded.'),
       deleteExpense: id => commit(() => deleteRecord(workspace, 'expenses', id), 'Expense removed.'),
