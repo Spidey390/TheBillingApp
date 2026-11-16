@@ -1,49 +1,50 @@
 import React, { useState, useMemo } from 'react';
-import { Printer, Download, IndianRupee, Percent, Wallet, TrendingDown } from 'lucide-react';
+import { Printer, Download } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { businessDate, dateRange as rangeFor, inRange } from '../../domain/dates';
 
-export default function BusinessReportsGST() {
-  const { orders, expenses, products, showToast, activeShopId, activeShop, shops } = useApp();
+export default function BusinessReports() {
+  const { orders, expenses, products, showToast } = useApp();
 
   const [dateRange, setDateRange] = useState('Today'); // 'Today', 'Last 7 Days', 'Last 30 Days', 'Custom Range'
 
   const ranges = ['Today', 'Last 7 Days', 'Last 30 Days', 'Custom Range'];
 
-  // Scope orders & expenses by active shop
-  const scopedOrders = useMemo(() => {
-    if (activeShopId === 'all') return orders;
-    return orders.filter(o => o.shopId === activeShopId || !o.shopId);
-  }, [orders, activeShopId]);
+  const today = businessDate();
+  const [custom, setCustom] = useState({ start: today, end: today });
+  const [start, end] = rangeFor(dateRange, today, custom);
+  const rangeValid = start <= end;
 
-  const scopedExpenses = useMemo(() => {
-    if (activeShopId === 'all') return expenses;
-    return expenses.filter(e => e.shopId === activeShopId || !e.shopId);
-  }, [expenses, activeShopId]);
-
-  // Calculate matching stats strictly from real data
-  const completedOrders = scopedOrders.filter(o => o.status === 'Completed');
-  const grossSales = completedOrders.reduce((s, o) => s + o.total, 0);
-  const totalTax = completedOrders.reduce((s, o) => s + (o.cgst + o.sgst), 0);
-  const cgstTotal = totalTax / 2;
-  const sgstTotal = totalTax / 2;
-  const taxableValue = Math.max(0, grossSales - totalTax);
-  const totalExpenses = scopedExpenses.reduce((s, e) => s + e.amount, 0);
-  const estimatedNetProfit = grossSales - totalExpenses;
+  const completedOrders = useMemo(() => orders.filter(order =>
+    order.status === 'Completed' && inRange(businessDate(order.createdAt), [start, end])
+  ), [orders, start, end]);
+  const refunds = useMemo(() => orders.filter(order =>
+    order.refund && inRange(businessDate(order.refund.recordedAt), [start, end])
+  ), [orders, start, end]);
+  const refundedTotal = refunds.reduce((total, order) => total + order.refund.amount, 0);
+  const grossSales = completedOrders.reduce((total, order) => total + order.total, 0);
+  const recordedTax = order => (order.cgst || 0) + (order.sgst || 0);
+  const netRecordedTax = completedOrders.reduce((total, order) => total + recordedTax(order), 0) -
+    refunds.reduce((total, order) => total + recordedTax(order), 0);
+  const netSales = grossSales - refundedTotal - netRecordedTax;
+  const totalExpenses = expenses.filter(expense => inRange(businessDate(expense.createdAt || expense.date), [start, end]))
+    .reduce((total, expense) => total + expense.amount, 0);
+  const estimatedNetProfit = netSales - totalExpenses;
+  const catalog = useMemo(() => new Map(products.map(product => [product.id, product.category])), [products]);
 
   // Category breakdown aggregated dynamically from actual orders
   const categorySales = useMemo(() => {
     const cats = {};
     completedOrders.forEach(o => {
       o.items?.forEach(it => {
-        const prod = products.find(p => p.id === it.id || p.name === it.name);
-        const catName = prod ? prod.category : 'General';
+        const catName = it.category || catalog.get(it.id) || 'Uncategorized';
         if (!cats[catName]) cats[catName] = { category: catName, units: 0, revenue: 0 };
         cats[catName].units += it.quantity;
         cats[catName].revenue += it.total || (it.price * it.quantity);
       });
     });
     return Object.values(cats).sort((a, b) => b.revenue - a.revenue);
-  }, [completedOrders, products]);
+  }, [completedOrders, catalog]);
 
   // Cashier ranking dynamically aggregated from actual orders
   const cashierSales = useMemo(() => {
@@ -63,18 +64,16 @@ export default function BusinessReportsGST() {
 
   const handleExportCSV = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
-      + "Metric,Value\n"
+      + `Period,${start} to ${end}\nMetric,Value\n`
       + `Gross Sales Revenue,₹${grossSales.toFixed(2)}\n`
-      + `Total GST Collected,₹${totalTax.toFixed(2)}\n`
-      + `CGST (2.5%),₹${cgstTotal.toFixed(2)}\n`
-      + `SGST (2.5%),₹${sgstTotal.toFixed(2)}\n`
+      + `Refunds,₹${refundedTotal.toFixed(2)}\n`
       + `Operating Expenses,₹${totalExpenses.toFixed(2)}\n`
-      + `Estimated Net Profit,₹${estimatedNetProfit.toFixed(2)}\n`;
+      + `Sales Less Recorded Expenses,₹${estimatedNetProfit.toFixed(2)}\n`;
     
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `gst-report-${dateRange.toLowerCase().replace(/ /g, '-')}.csv`);
+    link.setAttribute("download", `sales-report-${dateRange.toLowerCase().replace(/ /g, '-')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -82,41 +81,42 @@ export default function BusinessReportsGST() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto overflow-y-auto">
+    <div className="mx-auto w-full max-w-7xl min-w-0 space-y-4 app-gutters py-4 sm:space-y-6 sm:py-6" id="printable-report">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-white">Business Reports & GST Filing</h1>
+          <h1 className="text-xl font-extrabold text-white">Business Reports</h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Analyze sales performance, gross & net margins, GST breakdown, and cashier efficiency.
+            Review sales, refunds, expenses, and cashier performance.
           </p>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2 no-print">
           <button
-            onClick={handlePrint}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-[#1b2230] hover:bg-[#252f42] text-slate-200 border border-[#2b3548] text-xs font-bold transition-all"
+            onClick={handlePrint} disabled={!rangeValid}
+            className="flex min-h-11 items-center gap-1.5 rounded-xl border border-[#2b3548] bg-[#1b2230] px-3.5 text-xs font-bold text-slate-200 hover:bg-[#252f42] disabled:opacity-50"
           >
             <Printer className="w-3.5 h-3.5 text-orange-400" />
             <span>Print Report</span>
           </button>
           <button
-            onClick={handleExportCSV}
-            className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-950 transition-all"
+            onClick={handleExportCSV} disabled={!rangeValid}
+            className="flex min-h-11 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
           >
             <Download className="w-4 h-4 stroke-[2.5]" />
-            <span>Export CSV / Excel</span>
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
 
       {/* Date Range Selector */}
-      <div className="bg-[#141923] p-2 rounded-2xl border border-[#232b3a] inline-flex items-center space-x-1">
+      <div role="group" aria-label="Report date range"
+        className="grid grid-cols-2 gap-1 rounded-2xl border border-[#232b3a] bg-[#141923] p-1.5 sm:inline-flex sm:flex-wrap no-print">
         {ranges.map((r) => (
           <button
-            key={r}
-            onClick={() => setDateRange(r)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+            key={r} type="button"
+            onClick={() => setDateRange(r)} aria-pressed={dateRange === r}
+            className={`min-h-11 rounded-xl px-2 py-1.5 text-sm font-semibold transition-colors sm:px-3 ${
               dateRange === r
                 ? 'bg-orange-500 text-white shadow-sm'
                 : 'text-slate-400 hover:text-white'
@@ -127,8 +127,22 @@ export default function BusinessReportsGST() {
         ))}
       </div>
 
+      {dateRange === 'Custom Range' && (
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3 no-print">
+          {['start', 'end'].map(key => (
+            <label key={key} className="min-w-0 text-xs font-medium text-slate-300">
+              {key === 'start' ? 'Start date' : 'End date'}
+              <input type="date" value={custom[key]} onChange={event => setCustom({ ...custom, [key]: event.target.value })}
+                className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border border-slate-600 bg-slate-900 px-2 text-base text-slate-100" />
+            </label>
+          ))}
+        </div>
+      )}
+      {rangeValid ? <p className="text-sm text-slate-300">{start} to {end} · India time</p> :
+        <p role="alert" className="text-sm text-rose-300">Start date must be on or before end date.</p>}
+
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Gross Sales */}
         <div className="bg-[#171c26] p-5 rounded-2xl border border-[#232a39]">
           <span className="text-xs text-slate-400 font-medium">Gross Sales Revenue</span>
@@ -137,17 +151,7 @@ export default function BusinessReportsGST() {
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
             {completedOrders.length} Completed Orders
-          </div>
-        </div>
-
-        {/* Total GST */}
-        <div className="bg-[#171c26] p-5 rounded-2xl border border-[#232a39]">
-          <span className="text-xs text-slate-400 font-medium">Total GST Tax Collected</span>
-          <div className="text-2xl font-black text-sky-400 font-mono mt-1">
-            ₹{totalTax.toFixed(2)}
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1 font-mono">
-            CGST ₹{cgstTotal.toFixed(2)} | SGST ₹{sgstTotal.toFixed(2)}
+            {refundedTotal > 0 && <span className="block">Refunds ₹{refundedTotal.toFixed(2)}</span>}
           </div>
         </div>
 
@@ -164,46 +168,13 @@ export default function BusinessReportsGST() {
 
         {/* Net Profit */}
         <div className="bg-[#171c26] p-5 rounded-2xl border border-[#232a39]">
-          <span className="text-xs text-slate-400 font-medium">Estimated Net Profit</span>
+          <span className="text-xs text-slate-400 font-medium">Sales Less Recorded Expenses</span>
           <div className={`text-2xl font-black font-mono mt-1 ${estimatedNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
             ₹{estimatedNetProfit.toFixed(2)}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
-            Revenue - Expenses
+            Net sales after refunds and recorded taxes, less expenses
           </div>
-        </div>
-      </div>
-
-      {/* GST Summary & Filing Data Table */}
-      <div className="bg-[#171c26] p-5 rounded-2xl border border-[#232a39] space-y-3">
-        <div>
-          <h2 className="text-xs font-bold text-white uppercase tracking-wider">GST Summary & Filing Data</h2>
-          <p className="text-[11px] text-slate-400 mt-0.5">Taxable turnover and CGST/SGST tax liability</p>
-        </div>
-
-        <div className="overflow-x-auto pt-2">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-[#121620] text-slate-400 text-[10px] font-bold uppercase tracking-wider border-b border-[#232b3a]">
-                <th className="py-2.5 px-4">Tax Description</th>
-                <th className="py-2.5 px-4">Rate</th>
-                <th className="py-2.5 px-4">Taxable Value (₹)</th>
-                <th className="py-2.5 px-4">CGST Amount (₹)</th>
-                <th className="py-2.5 px-4">SGST Amount (₹)</th>
-                <th className="py-2.5 px-4 text-right">Total Tax (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="hover:bg-[#1a212e] transition-colors font-mono">
-                <td className="py-3 px-4 font-bold text-white font-sans">Standard Cafe F&B Rate</td>
-                <td className="py-3 px-4 text-slate-300">5.0%</td>
-                <td className="py-3 px-4 text-white">₹{taxableValue.toFixed(2)}</td>
-                <td className="py-3 px-4 text-sky-400">₹{cgstTotal.toFixed(2)}</td>
-                <td className="py-3 px-4 text-sky-400">₹{sgstTotal.toFixed(2)}</td>
-                <td className="py-3 px-4 text-right font-black text-white">₹{totalTax.toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
 

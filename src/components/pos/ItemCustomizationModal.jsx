@@ -1,20 +1,17 @@
 import React, { useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import Dialog from '../layout/Dialog';
 
 export default function ItemCustomizationModal() {
-  const { modalData, closeModal, addToCart, addons = [] } = useApp();
+  const { modalData, closeModal, addToCart } = useApp();
   const product = modalData;
 
-  if (!product) return null;
-
-  const productAddons = (product.addons && product.addons.length > 0)
-    ? product.addons
-    : (product.hasAddons ? addons : addons);
+  const productAddons = product?.hasAddons === false ? [] : product?.addons ?? [];
 
   // Defaults
   const [selectedVariant, setSelectedVariant] = useState(
-    product.sizes && product.sizes.length > 0 ? product.sizes[0] : null
+    product?.hasSizes ? product.sizes?.[0] ?? null : null
   );
   const [selectedAddons, setSelectedAddons] = useState([]);
   const [instruction, setInstruction] = useState('');
@@ -27,48 +24,61 @@ export default function ItemCustomizationModal() {
     }
   };
 
+  if (!product) return null;
+
   const basePrice = selectedVariant ? selectedVariant.price : product.price;
   const addonTotal = selectedAddons.reduce((sum, a) => sum + a.price, 0);
   const currentTotal = basePrice + addonTotal;
 
-  const handleAdd = () => {
-    addToCart(product, selectedVariant, selectedAddons, instruction);
-    closeModal();
+  const handleAdd = async () => {
+    if (await addToCart(product, selectedVariant, selectedAddons, instruction)) closeModal();
   };
 
+  const isVeg = product.dietary !== 'Non-Veg';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-[#181e28] border border-[#2b3547] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-        {/* Header preview */}
-        <div className="relative h-44 w-full bg-[#10141d] shrink-0">
-          <img
-            src={product.image}
-            alt={product.name}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#181e28] via-[#181e28]/50 to-transparent"></div>
+    <Dialog label="Customize item" onClose={closeModal}>
+      <div className="bg-[#181e28] border border-[#2b3547] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90dvh]">
+        {/* Header without photo */}
+        <div className="p-4 sm:p-5 border-b border-[#2b3547] bg-[#141923] flex items-start justify-between shrink-0">
+          <div className="space-y-1.5 pr-2">
+            <div className="flex items-center space-x-2">
+              <div
+                className={`w-3.5 h-3.5 rounded bg-white/90 border ${
+                  isVeg ? 'border-emerald-600' : 'border-rose-600'
+                } flex items-center justify-center p-0.5 shrink-0`}
+                title={product.dietary || 'Pure Veg'}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    isVeg ? 'bg-emerald-600' : 'bg-rose-600'
+                  }`}
+                ></span>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-500/15 text-orange-400 border border-orange-500/30">
+                {product.category}
+              </span>
+            </div>
+            <h2 className="text-base sm:text-lg font-bold text-white leading-snug">
+              {product.name}
+            </h2>
+            <div className="text-xs font-semibold text-slate-400">
+              Base Price: <span className="text-white font-mono font-bold">₹{product.price}</span>
+            </div>
+          </div>
 
           <button
-            onClick={closeModal}
-            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+            type="button" aria-label="Close" onClick={closeModal}
+            className="w-8 h-8 rounded-xl bg-[#1e2533] hover:bg-[#283244] text-slate-400 hover:text-white flex items-center justify-center transition-colors shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
-
-          <div className="absolute bottom-3 left-4">
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-500 text-white">
-              {product.category}
-            </span>
-            <h2 className="text-lg font-bold text-white mt-1 leading-snug">
-              {product.name}
-            </h2>
-          </div>
         </div>
 
         {/* Scrollable Options */}
         <div className="p-4 overflow-y-auto space-y-4 flex-1">
           {/* Sizes / Variants */}
-          {product.sizes && product.sizes.length > 0 && (
+          {product.hasSizes && product.sizes?.length > 0 && (
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
                 Choose Size / Variant
@@ -136,7 +146,7 @@ export default function ItemCustomizationModal() {
               type="text"
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
-              placeholder="e.g. Less sugar, extra hot, no onions"
+              placeholder="Enter special instructions"
               className="w-full bg-[#141923] text-xs text-white placeholder-slate-500 px-3 py-2 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500 transition-colors"
             />
           </div>
@@ -165,6 +175,6 @@ export default function ItemCustomizationModal() {
           </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

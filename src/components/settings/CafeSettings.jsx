@@ -1,87 +1,159 @@
-import React, { useState } from 'react';
-import { 
-  Building2, 
-  Printer, 
-  QrCode, 
-  Cpu, 
-  Database, 
-  Save, 
-  Download, 
-  RotateCcw, 
-  CheckCircle2 
-} from 'lucide-react';
+import React, { useId, useState } from 'react';
+import { Building2, Printer, QrCode, Save, RotateCcw, Volume2, Percent, Upload } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { isUpiQrImage } from '../../domain/upi';
+import { sanitizeText } from '../../domain/sanitize';
+import ToggleSwitch from '../layout/ToggleSwitch';
+
+const field = 'min-h-11 w-full min-w-0 rounded-xl border border-[#263143] bg-[#121620] px-3 py-2 text-base text-white sm:text-sm';
+const acceptedQrTypes = ['image/png', 'image/jpeg', 'image/webp'];
+
+async function prepareQrImage(file) {
+  if (!acceptedQrTypes.includes(file.type) || file.size > 10 * 1024 * 1024) {
+    throw new Error('Choose a PNG, JPG or WebP image up to 10 MB.');
+  }
+
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+
+    const scale = Math.min(1, 640 / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const png = canvas.toDataURL('image/png');
+    const saved = isUpiQrImage(png) ? png : canvas.toDataURL('image/jpeg', 0.95);
+    if (isUpiQrImage(saved)) return saved;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  throw new Error('Choose a smaller QR image.');
+}
+
+function PreferenceRow({ icon: Icon, title, description, checked, onChange, disabled }) {
+  const descriptionId = useId();
+  return (
+    <label className="flex cursor-pointer items-center gap-2.5 px-3 py-3 hover:bg-slate-800/50 has-[:disabled]:cursor-default sm:gap-3 sm:px-4">
+      <span className="hidden size-8 shrink-0 place-items-center rounded-lg bg-orange-500/10 text-orange-300 min-[360px]:grid">
+        <Icon className="size-4" aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-white">{title}</span>
+        <span id={descriptionId} className="mt-0.5 block text-xs leading-relaxed text-slate-400">{description}</span>
+      </span>
+      <ToggleSwitch label={title} descriptionId={descriptionId} checked={checked} onChange={onChange} disabled={disabled} />
+    </label>
+  );
+}
 
 export default function CafeSettings() {
-  const { 
-    settings, 
-    setSettings, 
-    resetDemoData, 
-    exportDatabase, 
-    importDatabase,
-    showToast,
-    triggerAudio 
-  } = useApp();
+  const { settings, setSettings, showToast } = useApp();
 
-  const [activeTab, setActiveTab] = useState('profile'); // 'profile', 'printer', 'upi', 'bom', 'backup'
-  const [formData, setFormData] = useState({ ...settings });
+  const [activeTab, setActiveTab] = useState('profile');
+  const [changes, setChanges] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [preparingQr, setPreparingQr] = useState(false);
+  const [qrError, setQrError] = useState('');
+  const formData = { ...settings, ...changes };
+  const qrPreview = isUpiQrImage(formData.upiQrImage) ? formData.upiQrImage : '';
 
   const tabs = [
-    { id: 'profile', label: 'Business Profile', icon: Building2 },
-    { id: 'printer', label: 'Invoice & Printer', icon: Printer },
-    { id: 'upi', label: 'UPI & Payments', icon: QrCode },
-    { id: 'bom', label: 'POS & Recipe BOM', icon: Cpu },
-    { id: 'backup', label: 'Data Backup & Reset', icon: Database },
+    { id: 'profile', label: 'Business Profile', shortLabel: 'Business', icon: Building2 },
+    { id: 'printer', label: 'Invoice & Printer', shortLabel: 'Invoices', icon: Printer },
+    { id: 'upi', label: 'UPI & Payments', shortLabel: 'UPI', icon: QrCode }
   ];
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setChanges(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = (e) => {
-    e?.preventDefault();
-    setSettings(formData);
-    triggerAudio('beep');
-    showToast('Cafe settings saved successfully!');
-  };
+  async function handleQrUpload(event) {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setPreparingQr(true);
+    setQrError('');
+    try {
+      handleChange('upiQrImage', await prepareQrImage(file));
+    } catch (error) {
+      setQrError(error instanceof DOMException ? 'Could not open this image. Choose another QR image.' : error.message);
+    } finally {
+      setPreparingQr(false);
+    }
+  }
+
+  async function handleSave(event) {
+    event?.preventDefault();
+    if (busy || preparingQr || !Object.keys(changes).length) return;
+    if (!formData.brandName.trim() || !formData.invoicePrefix.trim() ||
+        !Number.isSafeInteger(formData.startingNumber) || formData.startingNumber <= 0) {
+      showToast('Enter a business name, invoice prefix, and positive starting number.', 'error');
+      return;
+    }
+    if (formData.upiVpaId && !/^[a-z0-9._-]+@[a-z0-9.-]+$/i.test(formData.upiVpaId.trim())) {
+      showToast('Enter a valid UPI recipient or leave the field blank.', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const sanitizedChanges = { ...changes };
+      const textFields = ['brandName', 'ownerName', 'phone', 'email', 'streetAddress', 'city', 'state', 'pincode', 'invoicePrefix', 'fssaiLicense', 'gstinNumber', 'upiVpaId', 'payeeName', 'invoiceFooter'];
+      for (const key of textFields) {
+        if (typeof sanitizedChanges[key] === 'string') {
+          sanitizedChanges[key] = sanitizeText(sanitizedChanges[key], key === 'streetAddress' || key === 'invoiceFooter' ? 300 : 100);
+        }
+      }
+      if (await setSettings(sanitizedChanges)) setChanges({});
+    } catch (error) {
+      showToast(error.message || 'Could not save settings.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto overflow-y-auto">
+    <div className="mx-auto w-full max-w-5xl min-w-0 space-y-4 app-gutters py-4 sm:space-y-6 sm:py-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-extrabold text-white">Cafe Settings & Configuration</h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Customize GST billing details, thermal print templates, UPI QR payee, and backups.
-          </p>
+          <h1 className="text-xl font-extrabold text-white">Cafe Settings</h1>
         </div>
 
         <button
-          onClick={handleSave}
-          className="flex items-center space-x-1.5 px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-lg shadow-orange-500/25 transition-all self-start sm:self-auto"
+          onClick={handleSave} type="button" disabled={busy || preparingQr || !Object.keys(changes).length} aria-label="Save all settings"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-orange-700 px-3 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-50"
         >
-          <Save className="w-4 h-4" />
-          <span>Save All Settings</span>
+          <Save className="size-4" aria-hidden="true" />
+          <span>{busy ? 'Saving…' : 'Save settings'}</span>
         </button>
       </div>
 
       {/* Settings Sub-tabs Navigation */}
-      <div className="bg-[#141923] p-1.5 rounded-2xl border border-[#232b3a] flex items-center space-x-1 overflow-x-auto no-scrollbar">
+      <div role="group" aria-label="Settings sections" className="grid grid-cols-3 gap-1 rounded-2xl border border-[#232b3a] bg-[#141923] p-1.5">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              key={tab.id} type="button"
+              onClick={() => setActiveTab(tab.id)} aria-pressed={isActive} aria-label={tab.label}
+              className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2 text-center text-xs font-semibold transition-colors sm:flex-row sm:gap-2 sm:px-2 ${
                 isActive
                   ? 'bg-orange-500 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-[#1a212e]'
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
+              <Icon className="size-4 shrink-0" aria-hidden="true" />
+              <span className="sm:hidden">{tab.shortLabel}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           );
         })}
@@ -89,402 +161,246 @@ export default function CafeSettings() {
 
       {/* Settings Body Container */}
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Tab 1: Business Profile & GST Registration (Page 36) */}
+        {/* Business Profile */}
         {activeTab === 'profile' && (
-          <div className="bg-[#171c26] p-6 rounded-2xl border border-[#232a39] space-y-5">
+          <div className="bg-[#171c26] p-4 sm:p-6 rounded-2xl border border-[#232a39] space-y-5">
             <h2 className="text-xs font-bold text-white uppercase tracking-wider border-b border-[#232b3a] pb-3">
-              Cafe Identity & GST Registration
+              Cafe identity
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm [&>div]:min-w-0">
               <div>
                 <label className="text-slate-400 block mb-1">Cafe / Brand Name *</label>
-                <input
+                <input aria-label="Cafe / Brand Name"
                   type="text"
                   value={formData.brandName}
                   onChange={(e) => handleChange('brandName', e.target.value)}
                   required
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500 font-semibold"
+                  className={`${field} font-semibold`}
                 />
               </div>
 
               <div>
                 <label className="text-slate-400 block mb-1">Owner Full Name *</label>
-                <input
+                <input aria-label="Owner Full Name"
                   type="text"
                   value={formData.ownerName}
                   onChange={(e) => handleChange('ownerName', e.target.value)}
                   required
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500 font-semibold"
+                  className={`${field} font-semibold`}
                 />
               </div>
 
               <div>
                 <label className="text-slate-400 block mb-1">Mobile Phone *</label>
-                <input
+                <input aria-label="Mobile Phone"
                   type="text"
                   value={formData.phone}
                   onChange={(e) => handleChange('phone', e.target.value)}
                   required
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500 font-mono"
+                  className={`${field} font-mono`}
                 />
               </div>
 
               <div>
                 <label className="text-slate-400 block mb-1">Email Address</label>
-                <input
+                <input aria-label="Email Address"
                   type="email"
                   value={formData.email}
                   onChange={(e) => handleChange('email', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Business Registration</label>
-                <select
-                  value={formData.businessRegistration}
-                  onChange={(e) => handleChange('businessRegistration', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none"
-                >
-                  <option value="GST Registered Business">GST Registered Business</option>
-                  <option value="Composition Scheme">Composition Scheme (F&B)</option>
-                  <option value="Unregistered / Prop">Unregistered / Prop</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">GSTIN Number (15-digit)</label>
-                <input
-                  type="text"
-                  value={formData.gstin}
-                  onChange={(e) => handleChange('gstin', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500 font-mono"
+                  className={`${field} font-mono`}
                 />
               </div>
 
               <div className="md:col-span-2">
                 <label className="text-slate-400 block mb-1">Street Address</label>
-                <input
+                <input aria-label="Street Address"
                   type="text"
                   value={formData.streetAddress}
                   onChange={(e) => handleChange('streetAddress', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none focus:border-orange-500"
+                  className={field}
                 />
               </div>
 
               <div>
                 <label className="text-slate-400 block mb-1">City</label>
-                <input
+                <input aria-label="City"
                   type="text"
                   value={formData.city}
                   onChange={(e) => handleChange('city', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none"
+                  className={field}
                 />
               </div>
 
               <div>
                 <label className="text-slate-400 block mb-1">State</label>
-                <input
+                <input aria-label="State"
                   type="text"
                   value={formData.state}
                   onChange={(e) => handleChange('state', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none"
+                  className={field}
                 />
               </div>
 
               <div>
                 <label className="text-slate-400 block mb-1">Pincode</label>
-                <input
+                <input aria-label="Pincode"
                   type="text"
                   value={formData.pincode}
                   onChange={(e) => handleChange('pincode', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none font-mono"
+                  className={`${field} font-mono`}
                 />
               </div>
             </div>
+
+            <section aria-labelledby="pos-preferences" className="space-y-3 border-t border-[#232a39] pt-4">
+              <h3 id="pos-preferences" className="text-sm font-bold text-white">POS preferences</h3>
+              <div className="divide-y divide-[#232b3a] rounded-xl border border-[#232b3a] bg-[#121620]">
+                <PreferenceRow icon={RotateCcw} title="Staff refunds"
+                  description="Let staff record full refunds after returning the payment."
+                  checked={Boolean(formData.allowStaffRefunds)} disabled={busy}
+                  onChange={value => handleChange('allowStaffRefunds', value)} />
+                <PreferenceRow icon={Volume2} title="POS sounds"
+                  description="Play sounds when adding items and completing checkout."
+                  checked={(formData.audioBeepsEnabled ?? formData.audioEnabled) !== false} disabled={busy}
+                  onChange={value => handleChange('audioBeepsEnabled', value)} />
+                <PreferenceRow icon={Percent} title="Cashier discounts"
+                  description="Let cashiers apply preset percentage discounts to bills."
+                  checked={Boolean(formData.allowCashierDiscounts)} disabled={busy}
+                  onChange={value => handleChange('allowCashierDiscounts', value)} />
+              </div>
+            </section>
           </div>
         )}
 
         {/* Tab 2: Invoice Format & Thermal Printer Settings (Page 37) */}
         {activeTab === 'printer' && (
-          <div className="bg-[#171c26] p-6 rounded-2xl border border-[#232a39] space-y-5">
+          <div className="bg-[#171c26] p-4 sm:p-6 rounded-2xl border border-[#232a39] space-y-5">
             <h2 className="text-xs font-bold text-white uppercase tracking-wider border-b border-[#232b3a] pb-3">
               Invoice Format & Thermal Print Settings
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm [&>div]:min-w-0">
               <div>
                 <label className="text-slate-400 block mb-1">Invoice Prefix</label>
-                <input
+                <input aria-label="Invoice Prefix"
                   type="text"
                   value={formData.invoicePrefix}
                   onChange={(e) => handleChange('invoicePrefix', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none font-mono font-bold"
+                  className={`${field} font-mono font-bold`}
                 />
               </div>
 
               <div>
                 <label className="text-slate-400 block mb-1">Starting Number</label>
-                <input
+                <input aria-label="Starting Number"
                   type="number"
-                  value={formData.startingNumber}
+                  min="1" step="1" value={formData.startingNumber}
                   onChange={(e) => handleChange('startingNumber', Number(e.target.value))}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none font-mono"
+                  className={`${field} font-mono`}
                 />
               </div>
 
               <div>
                 <label className="text-slate-400 block mb-1">Default Thermal Size</label>
-                <select
+                <select aria-label="Default Thermal Size"
                   value={formData.defaultThermalSize}
                   onChange={(e) => handleChange('defaultThermalSize', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none"
+                  className={field}
                 >
                   <option value="80mm Standard POS Thermal">80mm Standard POS Thermal</option>
                   <option value="58mm Standard POS Thermal">58mm Standard POS Thermal</option>
                 </select>
               </div>
 
-              <div className="md:col-span-3">
+              <div className="lg:col-span-3">
                 <label className="text-slate-400 block mb-1">Receipt Footer Message</label>
-                <input
+                <input aria-label="Receipt Footer Message"
                   type="text"
                   value={formData.receiptFooterMessage}
                   onChange={(e) => handleChange('receiptFooterMessage', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none"
+                  className={field}
                 />
               </div>
 
-              <div className="md:col-span-3">
+              <div className="lg:col-span-3">
                 <label className="text-slate-400 block mb-1">Terms & Conditions</label>
-                <textarea
+                <textarea aria-label="Terms & Conditions"
                   value={formData.termsAndConditions}
                   onChange={(e) => handleChange('termsAndConditions', e.target.value)}
                   rows={2}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none text-xs"
+                  className={field}
                 />
               </div>
             </div>
           </div>
         )}
 
-        {/* Tab 3: Dynamic UPI QR & Payment Gateway (Page 38) */}
         {activeTab === 'upi' && (
-          <div className="bg-[#171c26] p-6 rounded-2xl border border-[#232a39] space-y-5">
+          <div className="bg-[#171c26] p-4 sm:p-6 rounded-2xl border border-[#232a39] space-y-5">
             <h2 className="text-xs font-bold text-white uppercase tracking-wider border-b border-[#232b3a] pb-3">
-              Dynamic UPI QR Code & Payment Setup
+              UPI payments
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="space-y-3 rounded-xl border border-[#263143] bg-[#121620] p-3.5 sm:p-4">
+              <div className="flex items-start gap-3">
+                {qrPreview ? (
+                  <img src={qrPreview} alt="Uploaded UPI QR preview" className="size-20 shrink-0 rounded-lg bg-white object-contain p-1" />
+                ) : (
+                  <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-orange-500/10 text-orange-300">
+                    <QrCode className="size-5" aria-hidden="true" />
+                  </div>
+                )}
+                <div className="min-w-0 space-y-1">
+                  <h3 className="text-sm font-semibold text-white">Payment QR image</h3>
+                  <p id="upi-qr-help" className="text-xs leading-relaxed text-slate-400">
+                    Upload your reusable UPI QR. Checkout will display it and ask the customer to enter the amount.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="relative inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-orange-500/35 bg-orange-500/10 px-3 text-sm font-semibold text-orange-200 hover:bg-orange-500/20 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-orange-400 has-[:disabled]:cursor-default has-[:disabled]:opacity-50">
+                  <Upload className="size-4" aria-hidden="true" />
+                  {preparingQr ? 'Preparing image…' : qrPreview ? 'Replace QR' : 'Upload QR'}
+                  <input type="file" className="sr-only" accept={acceptedQrTypes.join(',')}
+                    disabled={busy || preparingQr} aria-describedby="upi-qr-help" onChange={handleQrUpload} />
+                </label>
+                {qrPreview && (
+                  <button type="button" className="min-h-11 rounded-lg px-3 text-sm font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    disabled={busy || preparingQr} onClick={() => { handleChange('upiQrImage', ''); setQrError(''); }}>
+                    Remove QR
+                  </button>
+                )}
+              </div>
+              {qrError && <p role="alert" className="text-sm text-rose-300">{qrError}</p>}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm [&>div]:min-w-0">
               <div>
-                <label className="text-slate-400 block mb-1">Cafe UPI VPA ID *</label>
-                <input
+                <label htmlFor="settings-upi-id" className="text-slate-400 block mb-1">Cafe UPI ID</label>
+                <input id="settings-upi-id"
                   type="text"
                   value={formData.upiVpaId}
                   onChange={(e) => handleChange('upiVpaId', e.target.value)}
-                  required
-                  placeholder="e.g. brewandbite@upi"
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none font-mono"
+                  placeholder="Enter UPI ID"
+                  className={`${field} font-mono`}
                 />
               </div>
 
               <div>
                 <label className="text-slate-400 block mb-1">Payee Name</label>
-                <input
+                <input aria-label="Payee Name"
                   type="text"
                   value={formData.payeeName}
                   onChange={(e) => handleChange('payeeName', e.target.value)}
-                  className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none"
+                  className={field}
                 />
               </div>
             </div>
 
             <p className="text-xs text-slate-400 pt-2">
-              Customer will scan QR to pay directly into your cafe bank account with zero fees.
+              A UPI ID generates a QR with the bill amount when no image is uploaded.
             </p>
-          </div>
-        )}
-
-        {/* Tab 4: POS & Recipe BOM Automation Rules (Page 39) */}
-        {activeTab === 'bom' && (
-          <div className="bg-[#171c26] p-6 rounded-2xl border border-[#232a39] space-y-4">
-            <h2 className="text-xs font-bold text-white uppercase tracking-wider border-b border-[#232b3a] pb-3">
-              Operational Automation Rules
-            </h2>
-
-            <div className="space-y-3">
-              {/* Checkbox 1 */}
-              <label className="flex items-start justify-between p-4 rounded-xl bg-[#121620] border border-[#232b3a] cursor-pointer hover:border-[#333e54] transition-colors">
-                <div className="pr-4">
-                  <div className="text-xs font-bold text-white">
-                    Automatic Raw Material Recipe (BOM) Stock Deduction
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    Deduct coffee beans, milk, sugar, burger buns, cheese, etc. automatically when items are billed.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={formData.autoBOMDeduction}
-                  onChange={(e) => handleChange('autoBOMDeduction', e.target.checked)}
-                  className="w-5 h-5 rounded border-[#38465d] bg-[#1a212e] text-orange-500 focus:ring-0 mt-0.5"
-                />
-              </label>
-
-              {/* Checkbox 2 */}
-              <label className="flex items-start justify-between p-4 rounded-xl bg-[#121620] border border-[#232b3a] cursor-pointer hover:border-[#333e54] transition-colors">
-                <div className="pr-4">
-                  <div className="text-xs font-bold text-white">
-                    POS Audio Beep & Chime Sound Effects
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    Play audio beeps when clicking menu items and pleasant checkout success chime.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={formData.audioBeepsEnabled}
-                  onChange={(e) => handleChange('audioBeepsEnabled', e.target.checked)}
-                  className="w-5 h-5 rounded border-[#38465d] bg-[#1a212e] text-orange-500 focus:ring-0 mt-0.5"
-                />
-              </label>
-
-              {/* Checkbox 3 */}
-              <label className="flex items-start justify-between p-4 rounded-xl bg-[#121620] border border-[#232b3a] cursor-pointer hover:border-[#333e54] transition-colors">
-                <div className="pr-4">
-                  <div className="text-xs font-bold text-white">
-                    Allow Cashiers to Apply Custom Discounts
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    Enables counter staff to give percentage or flat rupee discounts on bills.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={formData.allowCashierDiscounts}
-                  onChange={(e) => handleChange('allowCashierDiscounts', e.target.checked)}
-                  className="w-5 h-5 rounded border-[#38465d] bg-[#1a212e] text-orange-500 focus:ring-0 mt-0.5"
-                />
-              </label>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 5: Database Backup (JSON Export) & Demo Reset (Page 40) */}
-        {activeTab === 'backup' && (
-          <div className="bg-[#171c26] p-6 rounded-2xl border border-[#232a39] space-y-5">
-            <h2 className="text-xs font-bold text-white uppercase tracking-wider border-b border-[#232b3a] pb-3">
-              Database Engine & Offline Storage Management
-            </h2>
-
-            {/* Active Database Architecture Card */}
-            <div className="p-4 rounded-xl bg-[#121620] border border-[#232b3a] space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-800/60 flex items-center justify-center text-cyan-400">
-                    <Database className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-white">IndexedDB (Dexie.js v4) - Production Database</h3>
-                    <p className="text-[11px] text-cyan-300/80">100% Offline-First • ACID Transactional Engine</p>
-                  </div>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  ONLINE & PERSISTENT
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 text-[11px] text-slate-400 border-t border-[#1e2636]">
-                <div>
-                  <span className="block text-slate-500 text-[10px]">TRANSACTION SAFETY</span>
-                  <span className="font-semibold text-slate-200">ACID Atomic Rollback</span>
-                </div>
-                <div>
-                  <span className="block text-slate-500 text-[10px]">STORAGE QUOTA</span>
-                  <span className="font-semibold text-slate-200">Persistent (Up to 60% Disk)</span>
-                </div>
-                <div>
-                  <span className="block text-slate-500 text-[10px]">CLOUD EXPENSE</span>
-                  <span className="font-semibold text-emerald-400">₹0/mo Lifetime Free</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {/* Export Full Database Backup */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#121620] border border-[#232b3a]">
-                <div>
-                  <h3 className="text-xs font-bold text-white">Export Full Database Backup</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Downloads all orders, master menu, recipe BOMs, customers, purchases, expenses and settings as a standalone JSON backup.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={exportDatabase}
-                  className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950 transition-colors shrink-0"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Export JSON</span>
-                </button>
-              </div>
-
-              {/* Import Database Backup */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#121620] border border-[#232b3a]">
-                <div>
-                  <h3 className="text-xs font-bold text-white">Restore Database From Backup</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Select a previously exported JSON backup file to restore into your local IndexedDB.
-                  </p>
-                </div>
-                <label className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-[#1e2636] hover:bg-[#283348] text-slate-200 font-bold text-xs border border-[#2e3b52] cursor-pointer transition-colors shrink-0">
-                  <Database className="w-4 h-4 text-orange-400" />
-                  <span>Choose Backup JSON</span>
-                  <input
-                    type="file"
-                    accept=".json"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          const content = event.target?.result;
-                          if (content && typeof content === 'string') {
-                            if (confirm('Restoring this backup will replace current records. Proceed?')) {
-                              importDatabase(content);
-                            }
-                          }
-                        };
-                        reader.readAsText(file);
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-
-              {/* Reset Database to Clean Production */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-rose-950/20 border border-rose-800/40">
-                <div>
-                  <h3 className="text-xs font-bold text-rose-300">Reset to Clean Production (Zero Mock Data)</h3>
-                  <p className="text-[11px] text-rose-400/80 mt-0.5">
-                    Resets database to clean state: clears all orders, customers, and expenses, while keeping protected cafe menu items.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm('Are you sure you want to reset the database to clean production state (zero mock data)?')) {
-                      resetDemoData();
-                    }
-                  }}
-                  className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-950 transition-colors shrink-0"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  <span>Reset Database</span>
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </form>

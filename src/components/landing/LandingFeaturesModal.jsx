@@ -8,11 +8,11 @@ export default function LandingFeaturesModal() {
   const capabilities = [
     { title: "38 Full HD Screen Captures", desc: "Exhaustive capture of every page, popup modal, bill preview, and settings tab." },
     { title: "Interactive POS Billing & Cart", desc: "Real-time menu catalog, category filtering, modifiers, and cart calculation." },
-    { title: "Dine-In, Takeaway & Delivery", desc: "Floor plan table mapping (Main Floor, Balcony, Mezzanine) with live status." },
+    { title: "Dine-In, Takeaway & Delivery", desc: "See which dining tables have open orders." },
     { title: "Dynamic UPI QR & Cash Checkout", desc: "On-screen dynamic QR code for instant UPI scan and quick cash change logic." },
-    { title: "Thermal Receipts & Kitchen KOT", desc: "58mm and 80mm receipt templates and dedicated Kitchen Order Tickets." },
-    { title: "Inventory & Recipe BOM", desc: "Stock management, unit costing, low-stock alerts, and auto-recipe deductions." },
-    { title: "CRM, Suppliers & GST Reports", desc: "Customer loyalty database, purchase inward, expense logs, and tax reports." }
+    { title: "Thermal Receipts", desc: "58mm and 80mm receipt templates." },
+    { title: "Table Management", desc: "Manage open orders and billing for each table." },
+    { title: "Customers & Reports", desc: "Customer records, expenses and sales reports." },
   ];
 
   const specs = [
@@ -23,15 +23,10 @@ export default function LandingFeaturesModal() {
     { label: "Software", value: "Brew & Bite Cafe POS" },
     { label: "License", value: "Free Lifetime Edition" },
     { label: "Offline Storage", value: "IndexedDB / SQLite JSON" },
-    { label: "GST Compliance", value: "Standard F&B GST 5%" },
     { label: "Compiler", value: "Antigravity AI Engine" },
   ];
 
   const shortcuts = [
-    { key: "F1", action: "New Bill / Clear active cart" },
-    { key: "F2", action: "Focus menu product search" },
-    { key: "F4", action: "Trigger instant payment / checkout modal" },
-    { key: "F8", action: "Open table floor plan selector" },
     { key: "Enter", action: "Confirm and complete payment in checkout modal" },
     { key: "Esc", action: "Dismiss any active popup modal" },
   ];
@@ -47,7 +42,7 @@ export default function LandingFeaturesModal() {
             </span>
             <h1 className="text-2xl font-black text-white">Cafe Billing Software & POS System</h1>
             <p className="text-xs text-orange-300 font-medium mt-1">
-              Free Lifetime POS, Inventory Management & Kitchen Display Walkthrough
+              Free Lifetime POS, Multi-Table Billing & Order Management Walkthrough
             </p>
           </div>
           <button
@@ -139,13 +134,13 @@ export default function LandingFeaturesModal() {
                 onClick={() => { setActiveView('orders'); closeModal(); }}
                 className="p-2.5 rounded-xl bg-[#121620] hover:bg-orange-500 hover:text-white text-slate-300 border border-[#242e40] text-xs font-bold transition-all text-center"
               >
-                Live Orders & KDS (Screen #16)
+                Orders & Invoices (Screen #16)
               </button>
               <button
-                onClick={() => { setActiveView('inventory'); closeModal(); }}
+                onClick={() => { setActiveView('tables'); closeModal(); }}
                 className="p-2.5 rounded-xl bg-[#121620] hover:bg-orange-500 hover:text-white text-slate-300 border border-[#242e40] text-xs font-bold transition-all text-center"
               >
-                Inventory & Recipe BOM (Screen #24)
+                Tables (Screen #24)
               </button>
             </div>
           </div>

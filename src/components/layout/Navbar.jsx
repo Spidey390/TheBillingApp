@@ -1,237 +1,79 @@
 import React, { useState } from 'react';
-import { 
-  Coffee, 
-  Zap, 
-  Maximize, 
-  Minimize, 
-  Moon, 
-  Bell, 
-  ChevronDown, 
-  Menu, 
-  Database, 
-  ShoppingBag, 
-  CheckCircle2, 
-  PanelLeftClose, 
-  PanelLeft 
-} from 'lucide-react';
+import { Menu, PanelsTopLeft, Coffee, UserRound, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import Dialog from './Dialog';
+import { navigationItems } from './navigationItems';
 
 export default function Navbar() {
-  const { 
-    settings, 
-    activeView, 
-    setActiveView, 
-    openModal, 
-    rawMaterials,
-    isSidebarCollapsed,
-    setIsSidebarCollapsed,
-    isMobileMenuOpen,
-    setIsMobileMenuOpen,
-    isDbReady,
-    dbName,
-    cart,
-    cartTotal,
-    setIsMobileCartOpen
-  } = useApp();
-
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
-      }
-    }
-  };
-
-  const lowStockCount = rawMaterials.filter(r => r.currentStock <= r.minThreshold).length;
+  const { settings, operator, isOwner, activeView, setActiveView, isDbReady,
+    isSidebarCollapsed, setIsSidebarCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, signOut } = useApp();
+  const [showProfile, setShowProfile] = useState(false);
+  const closeProfile = () => setShowProfile(false);
+  const name = operator.name?.trim() || operator.email;
+  const role = isOwner ? 'Owner' : 'Staff';
+  const page = navigationItems.find(item => item.id === activeView);
 
   return (
-    <header className="h-14 sm:h-16 bg-[#12161f] border-b border-[#232b38] px-3 sm:px-4 flex items-center justify-between select-none shrink-0 relative z-30">
-      {/* Left: Hamburger & Brand */}
-      <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
-        {/* Mobile Hamburger Drawer Toggle */}
-        <button
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="md:hidden p-1.5 rounded-lg bg-[#181e29] hover:bg-[#222a3a] text-slate-400 hover:text-white border border-[#283244] transition-colors"
-          title="Toggle Navigation Menu"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-
-        {/* Desktop Sidebar Rail Collapse Toggle */}
-        <button
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className="hidden md:flex p-1.5 rounded-lg bg-[#181e29] hover:bg-[#222a3a] text-slate-400 hover:text-white border border-[#283244] transition-colors"
-          title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar to Rail"}
-        >
-          {isSidebarCollapsed ? <PanelLeft className="w-4 h-4 text-orange-400" /> : <PanelLeftClose className="w-4 h-4" />}
-        </button>
-
-        {/* Brand Icon */}
-        <div 
-          onClick={() => setActiveView('dashboard')}
-          className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-950/40 cursor-pointer shrink-0"
-        >
-          <Coffee className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2.5]" />
-        </div>
-
-        {/* Brand Name & DB Status */}
-        <div className="min-w-0">
-          <div className="flex items-center space-x-2">
-            <h1 
-              onClick={() => setActiveView('dashboard')}
-              className="text-sm sm:text-base font-bold text-white tracking-tight cursor-pointer hover:text-orange-400 transition-colors truncate"
-            >
-              {settings.brandName}
-            </h1>
-            <span className="hidden sm:inline-flex text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              FREE LIFETIME
-            </span>
-            {/* Database indicator */}
-            <div 
-              title={dbName}
-              className="hidden lg:flex items-center space-x-1 px-1.5 py-0.5 rounded bg-[#18212e] text-[10px] text-cyan-300 border border-cyan-800/40 font-mono"
-            >
-              <Database className="w-3 h-3 text-cyan-400 shrink-0" />
-              <span>Dexie DB</span>
-              <span className={`w-1.5 h-1.5 rounded-full ${isDbReady ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-700 bg-[#12161f] app-gutters">
+      <button type="button" aria-label="Toggle navigation menu" title="Toggle Navigation Menu"
+        aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className="grid size-11 shrink-0 place-items-center rounded-lg hover:bg-slate-800 md:hidden">
+        <Menu className="h-5 w-5" />
+      </button>
+      <button type="button" aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden rounded-lg p-2 hover:bg-slate-800 md:block">
+        <PanelsTopLeft className="h-5 w-5" />
+      </button>
+      <span className="min-w-0 flex-1 truncate font-semibold md:hidden">
+        {page?.mobileTitle ?? page?.label ?? settings.brandName}
+      </span>
+      <button type="button" onClick={() => setActiveView('dashboard')}
+        className="hidden min-w-0 flex-1 items-center gap-2 text-left font-semibold md:flex" title={settings.brandName}>
+        <Coffee className="h-5 w-5 shrink-0 text-orange-300" />
+        <span className="truncate">{settings.brandName}</span>
+      </button>
+      {!isOwner && activeView !== 'pos' && (
+        <button type="button" onClick={() => setActiveView('pos')} className="rounded bg-orange-700 px-3 py-2 text-sm font-bold">POS</button>
+      )}
+      {!isDbReady && <span className="hidden text-sm text-amber-300 md:block">Database unavailable</span>}
+      <button type="button" aria-label="Open profile" aria-haspopup="dialog" title="Profile" onClick={() => setShowProfile(true)}
+        className="flex h-11 shrink-0 items-center gap-2 rounded-xl px-1.5 text-left hover:bg-slate-800 lg:pr-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-full border border-orange-500/25 bg-orange-500/10 text-orange-300">
+          <UserRound className="size-4" aria-hidden="true" />
+        </span>
+        <span className="hidden max-w-36 truncate text-sm font-semibold lg:block">{name}</span>
+      </button>
+      {showProfile && (
+        <Dialog label="Profile" onClose={closeProfile}>
+          <section className="w-full max-w-sm rounded-2xl border border-slate-700 bg-[#171c26] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-2">
+              <h2 className="font-bold text-white">Profile</h2>
+              <button type="button" aria-label="Close profile" onClick={closeProfile}
+                className="grid size-11 place-items-center rounded-lg text-slate-300 hover:bg-slate-700/50">
+                <X className="size-5" aria-hidden="true" />
+              </button>
             </div>
-          </div>
-          <p className="text-[11px] text-slate-400 truncate hidden xs:block">
-            {settings.tagline || 'Bengaluru • Fast Counter POS'}
-          </p>
-        </div>
-      </div>
-
-      {/* Right: Actions, Mobile Cart Toggle & Profile */}
-      <div className="flex items-center space-x-2 sm:space-x-2.5">
-        {/* Mobile/Tablet Cart Button (Visible on screens < lg in POS mode) */}
-        {activeView === 'pos' && (
-          <button
-            onClick={() => setIsMobileCartOpen(true)}
-            className="lg:hidden flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-orange-500 text-white shadow-md shadow-orange-500/20 transition-all active:scale-95"
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Cart ({cart.length})</span>
-            <span className="font-mono text-white/90">₹{cartTotal.toFixed(0)}</span>
-          </button>
-        )}
-
-        {/* POS Fast Button */}
-        <button
-          onClick={() => setActiveView('pos')}
-          className={`flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-            activeView === 'pos'
-              ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/25 ring-1 ring-orange-400'
-              : 'bg-orange-600/20 text-orange-400 hover:bg-orange-600/30 border border-orange-500/30'
-          }`}
-        >
-          <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current shrink-0" />
-          <span className="hidden sm:inline">POS BILLING</span>
-          <span className="sm:hidden">POS</span>
-        </button>
-
-        {/* Fullscreen Toggle */}
-        <button
-          onClick={toggleFullscreen}
-          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen POS"}
-          className="hidden sm:flex p-2 rounded-lg bg-[#181e29] hover:bg-[#222a3a] text-slate-400 hover:text-slate-200 border border-[#283244] transition-colors"
-        >
-          {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-        </button>
-
-        {/* Theme indicator */}
-        <button
-          title="Dark Mode Active"
-          className="hidden sm:flex p-2 rounded-lg bg-[#181e29] hover:bg-[#222a3a] text-amber-400 border border-[#283244] transition-colors"
-        >
-          <Moon className="w-4 h-4" />
-        </button>
-
-        {/* Notifications */}
-        <div className="relative">
-          <button
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="p-2 rounded-lg bg-[#181e29] hover:bg-[#222a3a] text-slate-400 hover:text-slate-200 border border-[#283244] transition-colors relative"
-          >
-            <Bell className="w-4 h-4" />
-            {lowStockCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-[#12161f] animate-pulse"></span>
-            )}
-          </button>
-
-          {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-[#1a212e] border border-[#2a3548] rounded-xl shadow-2xl p-3 z-50">
-              <div className="flex items-center justify-between pb-2 border-b border-[#2a3548]">
-                <span className="text-xs font-bold text-slate-200">Alerts & System Feed</span>
-                <span className="text-[10px] text-slate-400">Real-time</span>
-              </div>
-              <div className="mt-2 space-y-2 max-h-60 overflow-y-auto">
-                <div className="p-2 rounded-lg bg-[#141923] border border-[#232b3a] text-xs">
-                  <div className="flex items-center space-x-1.5 text-cyan-400 font-semibold mb-0.5">
-                    <Database className="w-3.5 h-3.5" />
-                    <span>IndexedDB Database Active</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400">Offline ACID persistent storage enabled. Zero recurring cloud fees.</p>
-                </div>
-                {lowStockCount > 0 ? (
-                  <div className="p-2 rounded-lg bg-rose-950/30 border border-rose-800/40 text-xs text-rose-300">
-                    <div className="font-semibold">{lowStockCount} raw materials below min threshold</div>
-                    <p className="text-[11px] text-rose-400/80 mt-0.5">Check Inventory & BOM tab to reorder stock.</p>
-                  </div>
-                ) : (
-                  <div className="p-2 rounded-lg bg-[#141923] border border-[#232b3a] text-xs text-slate-400">
-                    All inventory raw materials in sufficient quantity.
-                  </div>
+            <div className="flex gap-3 p-4">
+              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-orange-500/10 text-orange-300">
+                <UserRound className="size-5" aria-hidden="true" />
+              </span>
+              <dl className="min-w-0 space-y-1">
+                <div><dt className="sr-only">Name</dt><dd className="break-words font-semibold text-white">{name}</dd></div>
+                {operator.email !== name && (
+                  <div><dt className="sr-only">Email</dt><dd className="break-all text-sm text-slate-300">{operator.email}</dd></div>
                 )}
-              </div>
+                <div><dt className="sr-only">Role</dt><dd className="text-sm text-orange-300">{role}</dd></div>
+              </dl>
             </div>
-          )}
-        </div>
-
-        {/* Profile Pill */}
-        <div className="relative">
-          <button
-            onClick={() => setShowProfileMenu(!showProfileMenu)}
-            className="flex items-center space-x-1.5 sm:space-x-2 pl-1.5 sm:pl-2 pr-2 sm:pr-2.5 py-1.5 rounded-lg bg-[#181e29] hover:bg-[#222a3a] border border-[#283244] transition-colors"
-          >
-            <div className="w-6 h-6 rounded-full bg-orange-600/30 border border-orange-500/50 flex items-center justify-center text-orange-400 font-bold text-xs">
-              RK
-            </div>
-            <div className="text-left hidden sm:block">
-              <div className="text-xs font-bold text-slate-200 leading-none">{settings.ownerName}</div>
-              <div className="text-[10px] text-emerald-400 font-medium">Owner / Admin</div>
-            </div>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-
-          {showProfileMenu && (
-            <div className="absolute right-0 mt-2 w-48 bg-[#1a212e] border border-[#2a3548] rounded-xl shadow-2xl p-2 z-50">
-              <div className="px-2 py-1.5 border-b border-[#283244] mb-1">
-                <div className="text-xs font-bold text-white">{settings.ownerName}</div>
-                <div className="text-[10px] text-slate-400 truncate">{settings.email}</div>
-              </div>
-              <button
-                onClick={() => { setActiveView('settings'); setShowProfileMenu(false); }}
-                className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-[#252f40] hover:text-white transition-colors"
-              >
-                Cafe Settings & DB
-              </button>
-              <button
-                onClick={() => { setActiveView('staff'); setShowProfileMenu(false); }}
-                className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-[#252f40] hover:text-white transition-colors"
-              >
-                Staff & Roles
+            <div className="border-t border-slate-700/60 p-3">
+              <button type="button" onClick={() => { closeProfile(); signOut(); }}
+                className="w-full rounded-lg bg-slate-800 hover:bg-slate-700/80 p-2 text-sm font-semibold text-rose-300 transition-colors">
+                Sign out
               </button>
             </div>
-          )}
-        </div>
-      </div>
+          </section>
+        </Dialog>
+      )}
     </header>
   );
 }

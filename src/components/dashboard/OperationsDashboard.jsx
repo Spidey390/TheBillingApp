@@ -1,76 +1,88 @@
 import React, { useMemo } from 'react';
 import { 
-  Zap, 
   IndianRupee, 
   ShoppingBag, 
   TrendingUp, 
   Wallet, 
-  Clock, 
-  AlertTriangle, 
+  Grid2X2,
   Users, 
   Utensils,
-  Store,
-  ArrowRight,
-  Plus,
-  Sparkles,
-  MapPin,
-  CheckCircle2
+  ArrowRight
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { isTableOccupied } from '../../domain/tables';
+import { businessDate, shiftDate } from '../../domain/dates';
+
+function MetricCard({ label, value, detail, icon: Icon, color, onClick }) {
+  const Card = onClick ? 'button' : 'div';
+  return (
+    <Card type={onClick ? 'button' : undefined} onClick={onClick}
+      className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-1 rounded-xl border border-[#232a39] bg-[#171c26] p-3 text-left sm:p-4 ${onClick ? 'hover:border-orange-500/40 hover:bg-[#1d2330]' : ''}`}>
+      <span className="self-center text-xs font-medium text-slate-300">{label}</span>
+      <span className={`grid size-7 place-items-center rounded-lg sm:size-9 ${color}`}>
+        <Icon className="size-4 sm:size-5" aria-hidden="true" />
+      </span>
+      <span className="col-span-2 break-words text-lg font-bold tabular-nums text-white sm:text-xl">{value}</span>
+      {detail && <span className="col-span-2 text-xs text-slate-400">{detail}</span>}
+    </Card>
+  );
+}
 
 export default function OperationsDashboard() {
-  const { 
-    setActiveView, 
-    orders, 
-    expenses, 
-    customers, 
-    products, 
-    rawMaterials,
-    shops,
-    activeShopId,
-    activeShop,
-    switchShop,
-    currentUser,
-    openModal,
-    staff
-  } = useApp();
+  const { setActiveView, orders, expenses, customers, products, tables, isOwner } = useApp();
 
-  // Scoped orders & expenses based on activeShopId
-  const scopedOrders = useMemo(() => {
-    if (activeShopId === 'all') return orders;
-    return orders.filter(o => o.shopId === activeShopId || !o.shopId);
-  }, [orders, activeShopId]);
+  // Calculate real values from state
+  const todayStr = businessDate();
+  const completedOrders = useMemo(() => orders.filter(order => order.status === 'Completed'), [orders]);
+  const todayOrders = useMemo(() => completedOrders.filter(order =>
+    businessDate(order.createdAt) === todayStr), [completedOrders, todayStr]);
+  const summaryOrders = isOwner ? completedOrders : todayOrders;
+  const todaySales = todayOrders.reduce((sum, order) => sum + order.total, 0);
+  const aov = todayOrders.length ? (todaySales / todayOrders.length).toFixed(1) : '0.0';
+  const totalExpenses = expenses.filter(expense => businessDate(expense.createdAt || expense.date) === todayStr)
+    .reduce((sum, expense) => sum + expense.amount, 0);
+  const todayRefunds = completedOrders.filter(order => order.refund && businessDate(order.refund.recordedAt) === todayStr);
+  const excludingTax = (total, order) => total + order.total - (order.cgst || 0) - (order.sgst || 0);
+  const dailyBalance = todayOrders.reduce(excludingTax, 0) - todayRefunds.reduce(excludingTax, 0) - totalExpenses;
+  const occupiedTables = (tables || []).filter(isTableOccupied).length;
 
-  const scopedExpenses = useMemo(() => {
-    if (activeShopId === 'all') return expenses;
-    return expenses.filter(e => e.shopId === activeShopId || !e.shopId);
-  }, [expenses, activeShopId]);
+  // Breakdown by payment - accurately distributes split payments into Cash and UPI
+  const paymentBreakdown = useMemo(() => {
+    let card = 0;
+    let cash = 0;
+    let upi = 0;
+    let unknown = 0;
 
-  // Calculate real values from scoped state
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayOrders = scopedOrders.filter(o => 
-    o.createdAt?.startsWith(todayStr) || 
-    (o.createdAt && new Date(o.createdAt).toDateString() === new Date().toDateString())
-  );
-  
-  const todaySales = todayOrders.reduce((sum, o) => sum + o.total, 0);
-  const aov = todayOrders.length > 0 ? (todaySales / todayOrders.length).toFixed(1) : '0.0';
-  const totalExpenses = scopedExpenses.reduce((sum, e) => sum + e.amount, 0);
-  const lowStockCount = rawMaterials.filter(r => r.currentStock <= r.minThreshold).length;
+    summaryOrders.forEach(o => {
+      const total = Number(o.total || 0);
+      if (o.paymentMethod === 'Card') {
+        card += total;
+      } else if (o.paymentMethod === 'Cash') {
+        cash += total;
+      } else if (o.paymentMethod === 'UPI') {
+        upi += total;
+      } else if (o.paymentMethod === 'Split') {
+        if (o.splitBreakdown) {
+          cash += Number(o.splitBreakdown.cash || 0);
+          upi += Number(o.splitBreakdown.upi || 0);
+          if (o.splitBreakdown.card) card += Number(o.splitBreakdown.card || 0);
+        } else {
+          unknown += total;
+        }
+      } else {
+        unknown += total;
+      }
+    });
 
-  // Breakdown by payment
-  const paymentBreakdown = {
-    Card: scopedOrders.filter(o => o.paymentMethod === 'Card').reduce((s, o) => s + o.total, 0),
-    Cash: scopedOrders.filter(o => o.paymentMethod === 'Cash').reduce((s, o) => s + o.total, 0),
-    Split: scopedOrders.filter(o => o.paymentMethod === 'Split').reduce((s, o) => s + o.total, 0),
-    Upi: scopedOrders.filter(o => o.paymentMethod === 'UPI').reduce((s, o) => s + o.total, 0)
-  };
-  const totalPayAmount = paymentBreakdown.Card + paymentBreakdown.Cash + paymentBreakdown.Split + paymentBreakdown.Upi;
+    return { Card: card, Cash: cash, Upi: upi, Unallocated: unknown };
+  }, [summaryOrders]);
+
+  const totalPayAmount = paymentBreakdown.Card + paymentBreakdown.Cash + paymentBreakdown.Upi + paymentBreakdown.Unallocated;
 
   // Best selling items aggregated from actual orders
   const bestSellers = useMemo(() => {
     const counts = {};
-    scopedOrders.forEach(ord => {
+    summaryOrders.forEach(ord => {
       ord.items?.forEach(it => {
         if (!counts[it.name]) {
           counts[it.name] = { name: it.name, units: 0, revenue: 0 };
@@ -83,434 +95,265 @@ export default function OperationsDashboard() {
       .sort((a, b) => b.units - a.units)
       .slice(0, 5)
       .map((item, idx) => ({ rank: idx + 1, ...item }));
-  }, [scopedOrders]);
+  }, [summaryOrders]);
 
   // Channel breakdown aggregated from actual orders
   const channels = useMemo(() => {
-    const totalCount = scopedOrders.length || 1;
-    const delivery = scopedOrders.filter(o => o.channel?.toLowerCase().includes('delivery'));
-    const dineIn = scopedOrders.filter(o => o.channel?.toLowerCase().includes('dine'));
-    const takeaway = scopedOrders.filter(o => o.channel?.toLowerCase().includes('takeaway'));
+    const totalCount = completedOrders.length || 1;
+    const delivery = completedOrders.filter(o => o.channel?.toLowerCase().includes('delivery'));
+    const dineIn = completedOrders.filter(o => o.channel?.toLowerCase().includes('dine'));
+    const takeaway = completedOrders.filter(o => o.channel?.toLowerCase().includes('takeaway'));
 
     return [
       { 
         name: 'Delivery', 
         orders: delivery.length, 
         amount: delivery.reduce((s, o) => s + o.total, 0), 
-        percent: scopedOrders.length > 0 ? Math.round((delivery.length / totalCount) * 100) : 0, 
+        percent: completedOrders.length > 0 ? Math.round((delivery.length / totalCount) * 100) : 0,
         color: 'bg-orange-500' 
       },
       { 
         name: 'Dine In', 
         orders: dineIn.length, 
         amount: dineIn.reduce((s, o) => s + o.total, 0), 
-        percent: scopedOrders.length > 0 ? Math.round((dineIn.length / totalCount) * 100) : 0, 
+        percent: completedOrders.length > 0 ? Math.round((dineIn.length / totalCount) * 100) : 0,
         color: 'bg-orange-600' 
       },
       { 
         name: 'Takeaway', 
         orders: takeaway.length, 
         amount: takeaway.reduce((s, o) => s + o.total, 0), 
-        percent: scopedOrders.length > 0 ? Math.round((takeaway.length / totalCount) * 100) : 0, 
+        percent: completedOrders.length > 0 ? Math.round((takeaway.length / totalCount) * 100) : 0,
         color: 'bg-amber-600' 
       },
     ];
-  }, [scopedOrders]);
+  }, [completedOrders]);
 
   // Last 7 days dynamic dates
   const last7Days = useMemo(() => {
     const days = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const str = d.toISOString().slice(0, 10);
-      const daySales = scopedOrders.filter(o => o.createdAt?.startsWith(str)).reduce((s, o) => s + o.total, 0);
+      const str = shiftDate(todayStr, -i);
+      const daySales = completedOrders.filter(o => businessDate(o.createdAt) === str).reduce((s, o) => s + o.total, 0);
       days.push({ date: str, sales: daySales });
     }
     return days;
-  }, [scopedOrders]);
+  }, [completedOrders, todayStr]);
 
   const maxSale = Math.max(100, ...last7Days.map(d => d.sales));
+  const chartTop = 20;
+  const chartBottom = 180;
+  const chartMiddle = (chartTop + chartBottom) / 2;
+  const revenuePoints = last7Days.map(({ date, sales }, index) => ({
+    date,
+    x: 50 + index * 70,
+    y: chartBottom - (sales / maxSale) * (chartBottom - chartTop)
+  }));
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto overflow-y-auto">
-      {/* Multi-Shop Quick Bar & Banner */}
-      {currentUser?.role === 'OWNER' && (
-        <div className="bg-[#141924] p-3 sm:p-4 rounded-2xl border border-[#232c3f] flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-              SWITCH OUTLET VIEW:
-            </span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                onClick={() => switchShop('all')}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${
-                  activeShopId === 'all'
-                    ? 'bg-orange-500 text-white shadow-sm'
-                    : 'bg-[#1b2230] text-slate-300 hover:text-white border border-[#2b364a]'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>All Shops (Consolidated)</span>
-              </button>
+    <div className="mx-auto w-full max-w-7xl min-w-0 space-y-4 app-gutters py-4 sm:space-y-6 sm:py-6">
+      <header className="flex flex-wrap items-center justify-between gap-2.5">
+        <h1 className="text-xl font-extrabold text-white">{isOwner ? 'Dashboard' : 'Staff Dashboard'}</h1>
+        {isOwner && (
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-300">
+            <span className="size-1.5 rounded-full bg-emerald-400" aria-hidden="true" /> Live
+          </span>
+        )}
+      </header>
 
-              {shops.map(shop => (
-                <button
-                  key={shop.id}
-                  onClick={() => switchShop(shop.id)}
-                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${
-                    activeShopId === shop.id
-                      ? 'bg-orange-500 text-white shadow-sm'
-                      : 'bg-[#1b2230] text-slate-300 hover:text-white border border-[#2b364a]'
-                  }`}
-                >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>{shop.name.split('-')[1]?.trim() || shop.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button
-            onClick={() => openModal('shopManager')}
-            className="flex items-center space-x-1.5 px-3 py-1 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-bold transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Outlet</span>
-          </button>
-        </div>
-      )}
-
-      {/* Dashboard Top Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-[#171d29] to-[#121620] p-4 sm:p-5 rounded-2xl border border-[#232c3d]">
-        <div>
-          <div className="flex items-center space-x-2.5">
-            <h1 className="text-lg sm:text-xl font-extrabold text-white">
-              {activeShopId === 'all' 
-                ? 'Enterprise Multi-Outlet Operations' 
-                : `${activeShop?.name || 'Cafe'} Operations`}
-            </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>{activeShopId === 'all' ? 'Consolidated Live' : 'Outlet Live'}</span>
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            {activeShopId === 'all'
-              ? `Unified multi-outlet metrics across all ${shops.length} cafe branches in network.`
-              : `Operating metrics for ${activeShop?.name} (${activeShop?.code}) • ${activeShop?.city}.`}
-          </p>
-        </div>
-
-        <button
-          onClick={() => setActiveView('pos')}
-          className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-lg shadow-orange-500/25 transition-all self-start md:self-auto active:scale-95"
-        >
-          <Zap className="w-4 h-4 fill-current" />
-          <span>OPEN POS TERMINAL</span>
-        </button>
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
+        <MetricCard label="Today's sales" value={`₹${todaySales.toFixed(2)}`} icon={IndianRupee}
+          detail={isOwner ? `Avg. bill ₹${aov}` : undefined} color="bg-emerald-500/10 text-emerald-400" />
+        <MetricCard label="Today's orders" value={todayOrders.length} icon={ShoppingBag}
+          detail="Completed bills" color="bg-orange-500/10 text-orange-400" onClick={() => setActiveView('orders')} />
+        {isOwner && (
+          <MetricCard label="Sales less expenses" value={`₹${dailyBalance.toFixed(2)}`} icon={TrendingUp}
+            detail="After refunds and recorded taxes" color="bg-teal-500/10 text-teal-400" />
+        )}
+        <MetricCard label="Today's expenses" value={`₹${totalExpenses.toFixed(2)}`} icon={Wallet}
+          detail={!isOwner ? 'Your cash expenses' : undefined} color="bg-rose-500/10 text-rose-400"
+          onClick={() => setActiveView('expenses')} />
+        <MetricCard label="Occupied tables" value={`${occupiedTables} / ${tables.length}`} icon={Grid2X2}
+          color="bg-orange-500/10 text-orange-400" onClick={() => setActiveView('tables')} />
+        {isOwner && (
+          <>
+            <MetricCard label="Customers" value={customers.length} icon={Users} color="bg-purple-500/10 text-purple-400" />
+            <MetricCard label="Active products" value={products.length} icon={Utensils} color="bg-indigo-500/10 text-indigo-400" />
+          </>
+        )}
       </div>
 
-      {/* KPI Stat Cards (4 columns) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Today's Revenue */}
-        <div className="bg-[#151a24] p-4 rounded-2xl border border-[#222a38] relative overflow-hidden group hover:border-[#2f3a4e] transition-colors">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400">
-              {activeShopId === 'all' ? 'All Outlets Revenue' : 'Outlet Revenue Today'}
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-400">
-              <IndianRupee className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-white font-mono">
-              ₹{todaySales.toFixed(2)}
-            </div>
-            <div className="flex items-center space-x-1.5 mt-1 text-xs">
-              <span className="text-emerald-400 font-semibold flex items-center">
-                <TrendingUp className="w-3.5 h-3.5 mr-0.5" />
-                Live
-              </span>
-              <span className="text-slate-500">• {todayOrders.length} orders punched</span>
-            </div>
-          </div>
-        </div>
+      <div className={isOwner ? 'space-y-4 sm:space-y-6' : 'grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2'}>
+      <div className={isOwner ? 'grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12' : 'contents'}>
+        {isOwner && (
+          <>
+            {/* Revenue Trend Line Chart */}
+            <div className="lg:col-span-7 bg-[#171c26] p-3.5 sm:p-5 rounded-xl border border-[#232a39] flex flex-col justify-between">
+              <div>
+                <h2 className="text-xs font-bold text-white uppercase tracking-wider">Revenue Trend (Last 7 Days)</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">Daily sales collection volume</p>
+              </div>
 
-        {/* Card 2: Total Orders */}
-        <div className="bg-[#151a24] p-4 rounded-2xl border border-[#222a38] relative overflow-hidden group hover:border-[#2f3a4e] transition-colors">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400">Total Invoices</span>
-            <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
-              <ShoppingBag className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-white font-mono">
-              {scopedOrders.length}
-            </div>
-            <div className="flex items-center space-x-1.5 mt-1 text-xs text-slate-500">
-              <span>Avg Order Value:</span>
-              <span className="text-slate-300 font-semibold font-mono">₹{aov}</span>
-            </div>
-          </div>
-        </div>
+              <div className="relative mt-3 flex h-36 w-full items-end sm:h-56">
+                {totalPayAmount === 0 ? (
+                  <div className="flex h-full w-full flex-col items-center justify-center text-center text-xs text-slate-400">
+                    <TrendingUp className="w-8 h-8 mb-2 stroke-1 text-slate-600" />
+                    <span>No sales recorded yet</span>
+                  </div>
+                ) : (
+                  <svg viewBox="0 0 500 200" className="w-full h-full overflow-visible">
+                    {/* Grid Lines */}
+                    <line x1="40" y1={chartTop} x2="480" y2={chartTop} stroke="#252f40" strokeDasharray="3 3" />
+                    <text x="35" y={chartTop + 4} fill="#64748b" fontSize="9" textAnchor="end">₹{Math.round(maxSale)}</text>
 
-        {/* Card 3: Active Outlets / Registered Staff */}
-        <div className="bg-[#151a24] p-4 rounded-2xl border border-[#222a38] relative overflow-hidden group hover:border-[#2f3a4e] transition-colors">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400">
-              {activeShopId === 'all' ? 'Active Branches' : 'Outlet Staff'}
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-              {activeShopId === 'all' ? <Store className="w-4 h-4" /> : <Users className="w-4 h-4" />}
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-white font-mono">
-              {activeShopId === 'all' ? shops.length : staff.filter(s => s.shopId === activeShopId).length}
-            </div>
-            <div className="flex items-center space-x-1.5 mt-1 text-xs text-slate-500">
-              <span>Status:</span>
-              <span className="text-emerald-400 font-semibold">100% Operational</span>
-            </div>
-          </div>
-        </div>
+                    <line x1="40" y1={chartMiddle} x2="480" y2={chartMiddle} stroke="#252f40" strokeDasharray="3 3" />
+                    <text x="35" y={chartMiddle + 4} fill="#64748b" fontSize="9" textAnchor="end">₹{Math.round(maxSale / 2)}</text>
 
-        {/* Card 4: Operating Expenses */}
-        <div className="bg-[#151a24] p-4 rounded-2xl border border-[#222a38] relative overflow-hidden group hover:border-[#2f3a4e] transition-colors">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400">Recorded Expenses</span>
-            <div className="w-8 h-8 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
-              <Wallet className="w-4 h-4" />
+                    <line x1="40" y1={chartBottom} x2="480" y2={chartBottom} stroke="#252f40" />
+                    <text x="35" y={chartBottom + 4} fill="#64748b" fontSize="9" textAnchor="end">₹0</text>
+
+                    <polyline points={revenuePoints.map(({ x, y }) => `${x},${y}`).join(' ')}
+                      fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinejoin="round"
+                      strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                    {revenuePoints.map(({ date, x, y }) => (
+                      <g key={date}>
+                        <circle cx={x} cy={y} r="4" fill="#f97316" />
+                        <text x={x} y="196" fill="#64748b" fontSize="8" textAnchor="middle">
+                          {date.slice(5)}
+                        </text>
+                      </g>
+                    ))}
+                  </svg>
+                )}
+              </div>
             </div>
+          </>
+        )}
+        {/* Sales by Payment Method Donut */}
+        <div className={`min-w-0 bg-[#171c26] p-3.5 sm:p-5 rounded-xl border border-[#232a39] flex flex-col justify-between ${isOwner ? 'lg:col-span-5' : ''}`}>
+          <div>
+            <h2 className="text-xs font-bold text-white uppercase tracking-wider">Sales by Payment Method</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">{isOwner ? 'Completed sales · all dates' : 'Completed sales today'}</p>
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-white font-mono">
-              ₹{totalExpenses.toFixed(2)}
+
+          <div className="my-4 flex flex-wrap items-center justify-around gap-4">
+            {/* SVG Donut */}
+            <div className="relative size-28 shrink-0 sm:size-36">
+              <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                <circle cx="18" cy="18" r="14" fill="transparent" stroke="#1f2838" strokeWidth="5.5" />
+                {totalPayAmount > 0 && (
+                  <>
+                    <circle cx="18" cy="18" r="14" fill="transparent" stroke="#f97316" strokeWidth="5.5"
+                      strokeDasharray={`${(paymentBreakdown.Card / totalPayAmount) * 88} 88`} strokeDashoffset="0" />
+                    <circle cx="18" cy="18" r="14" fill="transparent" stroke="#3b82f6" strokeWidth="5.5"
+                      strokeDasharray={`${(paymentBreakdown.Cash / totalPayAmount) * 88} 88`} strokeDashoffset={`-${(paymentBreakdown.Card / totalPayAmount) * 88}`} />
+                    <circle cx="18" cy="18" r="14" fill="transparent" stroke="#a855f7" strokeWidth="5.5"
+                      strokeDasharray={`${(paymentBreakdown.Upi / totalPayAmount) * 88} 88`} strokeDashoffset={`-${((paymentBreakdown.Card + paymentBreakdown.Cash) / totalPayAmount) * 88}`} />
+                  </>
+                )}
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-[10px] uppercase tracking-wider text-slate-400">Total</span>
+                <span className="text-xs font-black text-white font-mono">₹{totalPayAmount.toFixed(0)}</span>
+              </div>
             </div>
-            <div className="flex items-center space-x-1.5 mt-1 text-xs">
-              <span className="text-slate-400">{scopedExpenses.length} entries tracked</span>
+
+            {/* Legend */}
+            <div className="min-w-0 space-y-2 text-xs">
+              <div className="flex items-center space-x-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
+                <span className="text-slate-400">Card</span>
+                <span className="text-white font-mono font-medium ml-auto">₹{paymentBreakdown.Card.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                <span className="text-slate-400">Cash</span>
+                <span className="text-white font-mono font-medium ml-auto">₹{paymentBreakdown.Cash.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                <span className="text-slate-400">UPI</span>
+                <span className="text-white font-mono font-medium ml-auto">₹{paymentBreakdown.Upi.toFixed(2)}</span>
+              </div>
+              {paymentBreakdown.Unallocated > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-300">Unallocated</span>
+                  <span className="ml-auto font-mono">₹{paymentBreakdown.Unallocated.toFixed(2)}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* OWNER MULTI-OUTLET PERFORMANCE MATRIX (Visible to Owner) */}
-      {currentUser?.role === 'OWNER' && (
-        <div className="bg-[#151a24] p-4 sm:p-5 rounded-2xl border border-[#222a38] space-y-4">
-          <div className="flex items-center justify-between border-b border-[#21293a] pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                <Store className="w-4 h-4 text-orange-400" />
-                <span>Outlets Performance & Switcher Hub</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Overview of all {shops.length} cafe shops with quick switch actions
-              </p>
-            </div>
-            <button
-              onClick={() => openModal('shopManager')}
-              className="text-xs font-bold text-orange-400 hover:text-orange-300 flex items-center space-x-1"
-            >
-              <span>Manage Outlets</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+      <div className={isOwner ? 'grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12' : 'contents'}>
+        {/* Top 5 Items */}
+        <div className={`min-w-0 bg-[#171c26] p-3.5 sm:p-5 rounded-xl border border-[#232a39] ${isOwner ? 'lg:col-span-7' : ''}`}>
+          <h2 className="text-xs font-bold text-white uppercase tracking-wider">Top 5 Best Selling Cafe Items</h2>
+          <p className="text-[11px] text-slate-400 mt-0.5">{isOwner ? 'Ranked by units sold' : 'Ranked by units sold today'}</p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {shops.map((shop) => {
-              const shopOrders = orders.filter(o => o.shopId === shop.id);
-              const shopSales = shopOrders.reduce((s, o) => s + o.total, 0);
-              const shopStaffMembers = staff.filter(s => s.shopId === shop.id);
-              const isSelected = activeShopId === shop.id;
-
-              return (
-                <div
-                  key={shop.id}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
-                    isSelected
-                      ? 'bg-orange-500/10 border-orange-500/50 shadow-md ring-1 ring-orange-500/40'
-                      : 'bg-[#181f2c] border-[#252f42] hover:border-[#35435e]'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <h4 className="text-xs font-bold text-white">{shop.name}</h4>
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#10141d] text-orange-400 border border-[#283244]">
-                            {shop.code}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5 flex items-center space-x-1">
-                          <MapPin className="w-3 h-3 text-slate-500" />
-                          <span>{shop.address || shop.city}</span>
-                        </p>
-                      </div>
-                      {isSelected && (
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-orange-500 text-white shadow-sm">
-                          CURRENT
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-[#222b3c] text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">TOTAL REVENUE</span>
-                        <span className="font-extrabold text-white font-mono">₹{shopSales.toFixed(2)}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">INVOICES PUNCHED</span>
-                        <span className="font-extrabold text-white font-mono">{shopOrders.length}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-[#222b3c] flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400">
-                      {shopStaffMembers.length} staff member{shopStaffMembers.length !== 1 ? 's' : ''}
-                    </span>
-                    <button
-                      onClick={() => switchShop(shop.id)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                        isSelected
-                          ? 'bg-orange-500/20 text-orange-400 cursor-default'
-                          : 'bg-[#20293b] hover:bg-orange-500 text-slate-200 hover:text-white'
-                      }`}
-                    >
-                      {isSelected ? 'Active Now' : 'Switch to Shop'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Middle Row: Payment Mode Breakdown & Sales Trend */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Payment Breakdown */}
-        <div className="bg-[#151a24] p-5 rounded-2xl border border-[#222a38] space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-white">Payment Collections</h3>
-              <p className="text-xs text-slate-400">UPI, Cash, Card & Split breakdown</p>
-            </div>
-            <span className="text-xs font-mono font-bold text-orange-400">
-              ₹{totalPayAmount.toFixed(2)}
-            </span>
-          </div>
-
-          <div className="space-y-3 pt-2">
-            {[
-              { mode: 'UPI / Dynamic QR', amount: paymentBreakdown.Upi, color: 'bg-emerald-500' },
-              { mode: 'Cash at Counter', amount: paymentBreakdown.Cash, color: 'bg-amber-500' },
-              { mode: 'Card POS Swipe', amount: paymentBreakdown.Card, color: 'bg-blue-500' },
-              { mode: 'Split Payment', amount: paymentBreakdown.Split, color: 'bg-purple-500' }
-            ].map((p) => {
-              const pct = totalPayAmount > 0 ? Math.round((p.amount / totalPayAmount) * 100) : 0;
-              return (
-                <div key={p.mode} className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-300 font-medium">{p.mode}</span>
-                    <span className="font-mono font-bold text-white">₹{p.amount.toFixed(2)} ({pct}%)</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-[#1e2634] rounded-full overflow-hidden">
-                    <div className={`h-full ${p.color} rounded-full`} style={{ width: `${pct}%` }}></div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 7-Day Sales Trend Bar Chart */}
-        <div className="lg:col-span-2 bg-[#151a24] p-5 rounded-2xl border border-[#222a38] flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-white">7-Day Sales Trajectory</h3>
-              <p className="text-xs text-slate-400">Dynamic revenue chart from IndexedDB database</p>
-            </div>
-            <span className="text-xs font-bold text-emerald-400">Active</span>
-          </div>
-
-          <div className="h-44 flex items-end justify-between gap-3 pt-4 border-b border-[#222a38]">
-            {last7Days.map((d) => {
-              const heightPct = Math.max(8, Math.round((d.sales / maxSale) * 100));
-              const label = new Date(d.date).toLocaleDateString('en-GB', { weekday: 'short' });
-              return (
-                <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full group">
-                  <div className="text-[10px] font-mono text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity mb-1">
-                    ₹{d.sales}
-                  </div>
-                  <div 
-                    style={{ height: `${heightPct}%` }}
-                    className="w-full max-w-[40px] bg-gradient-to-t from-orange-600 to-amber-500 rounded-t-lg group-hover:from-orange-500 group-hover:to-amber-400 transition-all shadow-md shadow-orange-950/20"
-                  ></div>
-                  <span className="text-[11px] font-medium text-slate-400 mt-2">{label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Row: Best Sellers & Channel Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Best Sellers */}
-        <div className="bg-[#151a24] p-5 rounded-2xl border border-[#222a38] space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white">Top Menu Favorites</h3>
-            <span className="text-xs text-slate-400">{bestSellers.length} items sold</span>
-          </div>
-
-          {bestSellers.length === 0 ? (
-            <div className="py-8 text-center text-slate-500 text-xs">
-              No orders punched yet. Punch items in POS billing to view top items!
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {bestSellers.map(item => (
-                <div key={item.name} className="flex items-center justify-between p-2.5 rounded-xl bg-[#181f2c] border border-[#242e40] text-xs">
-                  <div className="flex items-center space-x-2.5">
-                    <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 font-bold text-[10px] flex items-center justify-center">
+          <div className="mt-4 space-y-2.5">
+            {bestSellers.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-xs">
+                {isOwner ? 'No items sold yet.' : 'No items sold today.'}
+              </div>
+            ) : (
+              bestSellers.map(item => (
+                <div key={item.rank} className="flex items-center justify-between gap-2 p-3 rounded-lg bg-[#131720] border border-[#212837] hover:border-[#2f394e] transition-colors">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="w-6 h-6 shrink-0 rounded-md bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold flex items-center justify-center">
                       #{item.rank}
                     </span>
-                    <span className="font-bold text-white">{item.name}</span>
+                    <div>
+                      <h3 className="break-words text-xs font-bold text-slate-200">{item.name}</h3>
+                      <span className="text-[10px] text-slate-400">{item.units} units sold</span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="font-mono font-bold text-white">₹{item.revenue.toFixed(2)}</span>
-                    <span className="text-[10px] text-slate-400 block">{item.units} sold</span>
+                  <div className="text-xs font-mono font-bold text-emerald-400">
+                    ₹{item.revenue.toFixed(2)}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+              ))
+            )}
+          </div>
         </div>
 
-        {/* Order Channels */}
-        <div className="bg-[#151a24] p-5 rounded-2xl border border-[#222a38] space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white">Channel Distribution</h3>
-            <span className="text-xs text-slate-400">Dine-In vs Takeaway vs Delivery</span>
-          </div>
+        {isOwner && (
+          <>
+            {/* Order Channel */}
+            <div className="lg:col-span-5 bg-[#171c26] p-3.5 sm:p-5 rounded-xl border border-[#232a39] flex flex-col justify-between">
+              <h2 className="text-sm font-semibold text-white">Sales by order channel</h2>
+              <ul className="mt-4 space-y-4">
+                {channels.map(channel => (
+                  <li key={channel.name} className="space-y-1.5">
+                    <div className="flex justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-200">{channel.name === 'Dine In' ? 'Dine-in' : channel.name}</p>
+                        <p className="text-xs text-slate-400">{channel.orders} {channel.orders === 1 ? 'order' : 'orders'}</p>
+                      </div>
+                      <div className="min-w-0 break-words text-right tabular-nums">
+                        <p className="text-sm font-bold text-slate-100">₹{channel.amount.toFixed(2)}</p>
+                        <p className="text-xs text-slate-400">{channel.percent}%</p>
+                      </div>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[#111620]" aria-hidden="true">
+                      <div className={`h-full rounded-full ${channel.color}`} style={{ width: `${channel.percent}%` }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
 
-          <div className="space-y-3 pt-2">
-            {channels.map(ch => (
-              <div key={ch.name} className="p-3 rounded-xl bg-[#181f2c] border border-[#242e40] flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold text-white">{ch.name}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">{ch.orders} orders ({ch.percent}%)</div>
-                </div>
-                <div className="text-right font-mono font-bold text-white text-xs">
-                  ₹{ch.amount.toFixed(2)}
-                </div>
+              <div className="mt-3 flex justify-end border-t border-[#232a39] pt-1.5">
+                <button type="button" onClick={() => setActiveView('tables')}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-orange-300 hover:bg-orange-500/10">
+                  View tables <ArrowRight className="size-4" aria-hidden="true" />
+                </button>
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          </>
+        )}
+
+      </div>
       </div>
     </div>
   );

@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function operator() {
+      return get(/databases/$(database)/documents/operators/$(request.auth.uid)).data;
+    }
+    function owner() {
+      return request.auth != null && operator().active == true && operator().role == 'owner';
+    }
+    function staff() {
+      return request.auth != null && operator().active == true && operator().role == 'staff';
+    }
+    function active(id) {
+      return exists(/databases/$(database)/documents/posConfig/current) &&
+        get(/databases/$(database)/documents/posConfig/current).data.workspace == id;
+    }
+    function noTableItems(table) {
+      return table.get('activeOrder', null) == null || table.activeOrder.items.size() == 0;
+    }
+    function seqAfter(id) {
+      return getAfter(/databases/$(database)/documents/posWorkspaces/$(id)/config/invoiceSequence).data;
+    }
+    function savedOrder(id, orderId) {
+      return getAfter(/databases/$(database)/documents/posWorkspaces/$(id)/orders/$(orderId)).data;
+    }
+    function validTender(order) {
+      return order.total is number && order.total >= 0 && (
+        (order.paymentMethod == 'Cash' && order.amountReceived is number && order.amountReceived >= order.total) ||
+        order.paymentMethod in ['UPI', 'Card'] ||
+        (order.paymentMethod == 'Split' && order.splitBreakdown.cash >= 0 && order.splitBreakdown.upi >= 0 &&
+          order.splitBreakdown.cash + order.splitBreakdown.upi >= order.total - 0.000001 &&
+          order.splitBreakdown.cash + order.splitBreakdown.upi <= order.total + 0.000001)
+      );
+    }
+    match /operators/{uid} {
+      allow get: if request.auth != null && (request.auth.uid == uid || owner());
+      allow list: if owner();
+      allow create: if owner() && request.resource.data.role == 'staff' &&
+        request.resource.data.keys().hasOnly(['role', 'active', 'name', 'email']) && request.resource.data.email is string &&
+        request.resource.data.active is bool && request.resource.data.name is string;
+      allow update: if owner() && resource.data.role == 'staff' && request.resource.data.role == 'staff' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'active']) &&
+        request.resource.data.active is bool && request.resource.data.name is string;
+      allow delete: if owner() && resource.data.role == 'staff' && resource.data.active == false;
+    }
+    match /posConfig/branding {
+      function activeSettings() {
+        let id = getAfter(/databases/$(database)/documents/posConfig/current).data.workspace;
+        return getAfter(/databases/$(database)/documents/posWorkspaces/$(id)/config/settings).data;
+      }
+      allow get: if true;
+      allow create, update: if owner() &&
+        request.resource.data.keys().hasOnly(['brandName']) &&
+        request.resource.data.brandName is string &&
+        request.resource.data.brandName == activeSettings().brandName;
+    }
+    match /posConfig/current {
+      allow get: if owner() || staff();
+      allow create, update: if owner() && request.resource.data.keys().hasOnly(['workspace']) &&
+        request.resource.data.workspace is string &&
+        existsAfter(/databases/$(database)/documents/posWorkspaces/$(request.resource.data.workspace)/config/settings);
+    }
+    match /posWorkspaces/{id}/{type}/{key} {
+      // An owner can stage a replacement workspace. Staff can only read and
+      // operate the active workspace, and owners cannot sell in it.
+      allow read, write: if owner() && !active(id) && type in [
+        'config', 'tables', 'products', 'customers', 'orders', 'suppliers', 'purchases',
+        'expenses', 'staff', 'rawMaterials', 'auditLogs', 'identity'
+      ];
+      allow read: if active(id) && (owner() || (staff() && type in ['config', 'tables', 'products', 'customers', 'orders', 'identity']));
+      allow write: if active(id) && owner() && type in ['products', 'customers', 'suppliers', 'purchases', 'expenses', 'staff', 'identity', 'rawMaterials', 'auditLogs'];
+      allow update: if active(id) && owner() && type == 'config' && key == 'settings' &&
+        request.resource.data.gstRate is number && request.resource.data.gstRate >= 0 &&
+        request.resource.data.startingNumber is int && request.resource.data.startingNumber > 0;
+      allow create: if active(id) && owner() && type == 'tables' &&
+        request.resource.data.activeOrder == null && request.resource.data.status == 'Available';
+      allow update: if active(id) && type == 'tables' && (
+        (owner() && noTableItems(resource.data) && noTableItems(request.resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reserved'])) ||
+        (staff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'activeOrder', 'reserved', 'status', 'currentOrderTotal'
+        ]))
+      );
+      allow delete: if active(id) && owner() && type == 'tables' && noTableItems(resource.data);
+
+      allow read, delete: if active(id) && staff() && type == 'expenses' &&
+        resource.data.recordedBy == request.auth.uid;
+      allow create: if active(id) && staff() && type == 'expenses' &&
+        request.resource.data.recordedBy == request.auth.uid &&
+        request.resource.data.id == key &&
+        request.resource.data.paymentMethod == 'Cash' &&
+        request.resource.data.amount is number && request.resource.data.amount > 0 &&
+        request.resource.data.reason is string && request.resource.data.reason.size() > 0;
+      allow create: if active(id) && staff() && type == 'customers' &&
+        request.resource.data.ordersCount == 0 && request.resource.data.totalSpent == 0;
+      allow update: if active(id) && staff() && type == 'customers' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ordersCount', 'totalSpent', 'avgOrderValue']) &&
+        request.resource.data.ordersCount == resource.data.ordersCount + 1 &&
+        request.resource.data.totalSpent >= resource.data.totalSpent;
+      allow create: if active(id) && staff() && type == 'identity' && key.matches('customers-phone-.*');
+
+      allow create: if active(id) && staff() && type == 'orders' &&
+        request.resource.data.id == key && request.resource.data.cashierUid == request.auth.uid &&
+        request.resource.data.status == 'Completed' &&
+        request.resource.data.channel in ['Dine-In', 'Takeaway', 'Delivery'] &&
+        (request.resource.data.channel == 'Dine-In' || request.resource.data.tableId == null) &&
+        validTender(request.resource.data) &&
+        seqAfter(id).lastOrderId == key &&
+        seqAfter(id).next == request.resource.data.invoiceSequence + 1 &&
+        seqAfter(id).next > get(/databases/$(database)/documents/posWorkspaces/$(id)/config/invoiceSequence).data.next;
+      allow update: if active(id) && staff() && type == 'orders' && resource.data.get('refund', null) == null && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['refund']) &&
+          resource.data.status == 'Completed' &&
+          get(/databases/$(database)/documents/posWorkspaces/$(id)/config/settings).data.get('allowStaffRefunds', false) == true &&
+          request.resource.data.refund.keys().hasOnly(['amount', 'reason', 'recordedAt', 'cashierUid', 'cashierName']) &&
+          request.resource.data.refund.cashierUid == request.auth.uid &&
+          request.resource.data.refund.amount == resource.data.total &&
+          request.resource.data.refund.reason is string && request.resource.data.refund.reason.size() > 0 &&
+          request.resource.data.refund.reason.size() <= 300)
+      );
+      allow update: if active(id) && staff() && type == 'config' && key == 'invoiceSequence' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['next', 'count', 'lastOrderId']) &&
+        request.resource.data.next > resource.data.next &&
+        request.resource.data.count == resource.data.count + 1 &&
+        savedOrder(id, request.resource.data.lastOrderId).invoiceSequence == request.resource.data.next - 1;
+    }
+  }
+}

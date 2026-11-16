@@ -1,47 +1,31 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Eye, Printer, Filter, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { businessDate, dateRange, inRange } from '../../domain/dates';
+import RefundDialog from './RefundDialog';
+import FilterToolbar from '../layout/FilterToolbar';
+
+const all = 'All';
+const timeOptions = [all, 'Today', 'Yesterday', 'This Week', 'This Month'].map(value => ({ value }));
+const channelOptions = [all, 'Dine In', 'Takeaway', 'Delivery'].map(value => ({ value }));
 
 export default function OrdersKDS() {
-  const { orders, setOrders, openModal, showToast, activeShopId, shops } = useApp();
+  const { orders, openModal, isOwner, settings } = useApp();
 
-  const [timeFilter, setTimeFilter] = useState('Today'); // 'Today', 'Yesterday', 'This Week', 'This Month', 'All'
-  const [statusFilter, setStatusFilter] = useState('All'); // 'All', 'New', 'Preparing', 'Ready', 'Completed', 'Cancelled'
-  const [channelFilter, setChannelFilter] = useState('All'); // 'All', 'Dine In', 'Takeaway', 'Delivery'
+  const [timeFilter, setTimeFilter] = useState(all);
+  const [channelFilter, setChannelFilter] = useState(all);
   const [search, setSearch] = useState('');
-
-  const timeOptions = ['Today', 'Yesterday', 'This Week', 'This Month', 'All'];
-  const statusOptions = ['All', 'New', 'Preparing', 'Ready', 'Completed', 'Cancelled'];
-  const channelOptions = ['All', 'Dine In', 'Takeaway', 'Delivery'];
+  const [refundTarget, setRefundTarget] = useState(null);
 
   // Filter orders
+  const today = businessDate();
   const filteredOrders = useMemo(() => {
+    const range = dateRange(timeFilter, today);
     return orders.filter(order => {
-      // Multi-Shop Filter
-      if (activeShopId !== 'all' && order.shopId && order.shopId !== activeShopId) {
-        return false;
-      }
-
-      // Time Filter
-      if (timeFilter === 'Today') {
-        const isToday = order.createdAt.startsWith('2026-10-07') || new Date(order.createdAt).toDateString() === new Date().toDateString();
-        if (!isToday) return false;
-      } else if (timeFilter === 'Yesterday') {
-        const isYesterday = order.createdAt.startsWith('2026-10-06');
-        if (!isYesterday) return false;
-      } else if (timeFilter === 'This Week') {
-        // Oct 03 to Oct 07
-        const isWeek = order.createdAt.startsWith('2026-10');
-        if (!isWeek) return false;
-      }
-
-      // Status Filter
-      if (statusFilter !== 'All' && order.status !== statusFilter) {
-        return false;
-      }
+      if (!inRange(businessDate(order.createdAt), range)) return false;
 
       // Channel Filter
-      if (channelFilter !== 'All') {
+      if (channelFilter !== all) {
         const normalizedChan = channelFilter.replace('-', ' ').toLowerCase();
         const orderChan = order.channel.replace('-', ' ').toLowerCase();
         if (orderChan !== normalizedChan) return false;
@@ -58,176 +42,126 @@ export default function OrdersKDS() {
 
       return true;
     });
-  }, [orders, timeFilter, statusFilter, channelFilter, search]);
-
-  const updateOrderStatus = (orderId, newStatus) => {
-    setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-    showToast(`Order status updated to ${newStatus}`);
-  };
+  }, [orders, timeFilter, channelFilter, search, today]);
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto overflow-y-auto">
+    <div className="w-full max-w-7xl mx-auto min-w-0 app-gutters py-4 sm:py-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-extrabold text-white">Orders & Kitchen Display</h1>
+        <h1 className="text-xl font-extrabold text-white">Orders</h1>
         <p className="text-xs text-slate-400 mt-0.5">
-          Track live orders, food prep status, billing history, and reprint invoices.
+          Track customer orders, billing history, and reprint invoices.
         </p>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="bg-[#141923] p-4 rounded-2xl border border-[#232b3a] space-y-3.5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Time Filter Tabs */}
-          <div className="flex items-center space-x-1.5 bg-[#10131a] p-1 rounded-xl border border-[#212837] shrink-0 overflow-x-auto">
-            {timeOptions.map((tf) => (
-              <button
-                key={tf}
-                onClick={() => setTimeFilter(tf)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  timeFilter === tf
-                    ? 'bg-orange-500 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {tf}
-              </button>
-            ))}
-          </div>
-
-          {/* Search Input */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search invoice or customer..."
-              className="w-full bg-[#1b2230] text-xs text-white placeholder-slate-500 pl-8 pr-3 py-2 rounded-xl border border-[#293345] focus:outline-none focus:border-orange-500 transition-colors"
-            />
-          </div>
-        </div>
-
-        {/* Secondary Filters: Status & Channel */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#202737] text-xs">
-          {/* Status Pills */}
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] text-slate-400 font-medium">Status:</span>
-            <div className="flex items-center space-x-1 overflow-x-auto">
-              {statusOptions.map((st) => (
-                <button
-                  key={st}
-                  onClick={() => setStatusFilter(st)}
-                  className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold transition-all ${
-                    statusFilter === st
-                      ? 'bg-white text-slate-900 font-bold'
-                      : 'bg-[#1b2230] text-slate-400 hover:text-slate-200 border border-[#293345]'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Channel Pills */}
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] text-slate-400 font-medium">Channel:</span>
-            <div className="flex items-center space-x-1">
-              {channelOptions.map((ch) => (
-                <button
-                  key={ch}
-                  onClick={() => setChannelFilter(ch)}
-                  className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold transition-all ${
-                    channelFilter === ch
-                      ? 'bg-orange-500 text-white font-bold'
-                      : 'bg-[#1b2230] text-slate-400 hover:text-slate-200 border border-[#293345]'
-                  }`}
-                >
-                  {ch}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+      <FilterToolbar search={search} onSearch={setSearch} searchLabel="Search orders" placeholder="Search orders…"
+        groups={[
+          { name: 'date', label: 'Order date', value: timeFilter, defaultValue: all, options: timeOptions },
+          { name: 'channel', label: 'Order channel', value: channelFilter, defaultValue: all, options: channelOptions }
+        ]}
+        onApply={({ date, channel }) => {
+          setTimeFilter(date);
+          setChannelFilter(channel);
+        }} />
 
       {/* Orders Table */}
       <div className="bg-[#141923] rounded-2xl border border-[#232b3a] overflow-hidden">
         {filteredOrders.length === 0 ? (
           <div className="py-20 text-center text-slate-500 text-xs">
-            No orders found matching filters.
+            {orders.length ? 'No orders match these filters.' : 'No bills have been saved yet.'}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#121620] text-slate-400 text-[10px] font-bold uppercase tracking-wider border-b border-[#232b3a]">
-                  <th className="py-3 px-4">Invoice / Order</th>
-                  <th className="py-3 px-4">Date & Time</th>
-                  <th className="py-3 px-4">Customer & Channel</th>
-                  <th className="py-3 px-4">Items</th>
-                  <th className="py-3 px-4">Total Amount</th>
-                  <th className="py-3 px-4">Payment</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+          <div className="xl:overflow-x-auto">
+            <table role="table" aria-label="Order history" className="responsive-records mobile-table orders-records w-full text-left text-xs border-collapse min-w-[700px]">
+              <thead role="rowgroup">
+                <tr role="row" className="bg-[#121620] text-slate-400 text-[10px] font-bold uppercase tracking-wider border-b border-[#232b3a]">
+                  <th role="columnheader" scope="col" aria-label="Serial number" className="record-serial px-3 py-3 text-center">No.</th>
+                  <th role="columnheader" scope="col" className="py-3 px-4 order-record-invoice">
+                    <span className="md:hidden">Invoice</span><span className="hidden md:inline">Invoice / Order</span>
+                  </th>
+                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra">Date & Time</th>
+                  <th role="columnheader" scope="col" className="py-3 px-4">
+                    <span className="md:hidden">Customer</span><span className="hidden md:inline">Customer &amp; Channel</span>
+                  </th>
+                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra">Items</th>
+                  <th role="columnheader" scope="col" className="order-record-mobile-payment">Payment</th>
+                  <th role="columnheader" scope="col" className="py-3 px-4 order-record-total">
+                    <span className="md:hidden">Total</span><span className="hidden md:inline">Total Amount</span>
+                  </th>
+                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra">Payment</th>
+                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra">Status</th>
+                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#1e2636]">
-                {filteredOrders.map((order) => {
-                  const isCompleted = order.status === 'Completed';
+              <tbody role="rowgroup" className="divide-y divide-[#1e2636]">
+                {filteredOrders.map((order, index) => {
+                  const isCompleted = order.status === 'Completed' && !order.refund;
                   const isPreparing = order.status === 'Preparing';
                   const isReady = order.status === 'Ready';
 
                   return (
-                    <tr
+                    <tr role="row"
                       key={order.id}
                       className="hover:bg-[#18202d] transition-colors group"
                     >
+                      <td role="cell" className="record-serial px-3 py-3 text-center tabular-nums text-slate-400">{index + 1}</td>
                       {/* Invoice & Token */}
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-white font-mono">{order.invoiceNo}</div>
-                        <div className="text-[10px] text-slate-500">Token #{order.tokenNo}</div>
+                      <td role="cell" className="py-3 px-4 record-title">
+                        <button type="button" aria-label={`View invoice ${order.invoiceNo}`} aria-haspopup="dialog"
+                          onClick={() => openModal('receipt', order)}
+                          className="min-h-11 w-full rounded-md text-left font-mono font-semibold text-orange-300 underline-offset-2 hover:underline md:hidden">
+                          {order.invoiceNo}
+                        </button>
+                        <div className="hidden md:block">
+                          <div className="flex items-baseline gap-2">
+                            <span className="hidden tabular-nums text-xs font-medium text-slate-400 md:max-xl:inline">
+                              <span className="sr-only">Serial number </span>{index + 1}.
+                            </span>
+                            <span className="font-bold text-white font-mono">{order.invoiceNo}</span>
+                          </div>
+                          <div className="text-xs text-slate-400">Token #{order.tokenNo}</div>
+                        </div>
                       </td>
 
                       {/* Date & Time */}
-                      <td className="py-3 px-4 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                      <td role="cell" className="py-3 px-4 text-slate-400 font-mono text-[11px] whitespace-nowrap mobile-table-extra"><span className="record-label" aria-hidden="true">Date and time</span>
                         {order.displayDate}
                       </td>
 
                       {/* Customer & Channel */}
-                      <td className="py-3 px-4">
+                      <td role="cell" className="py-3 px-4"><span className="record-label" aria-hidden="true">Customer</span>
                         <div className="font-bold text-slate-200">{order.customerName}</div>
-                        <div className="text-[10px] text-orange-400/90 font-medium">
+                        <div className="mobile-table-extra text-[10px] text-orange-400/90 font-medium">
                           {order.channel.toUpperCase()} {order.table ? `• ${order.table.toUpperCase()}` : ''}
                         </div>
-                        {activeShopId === 'all' && (
-                          <div className="text-[10px] text-amber-300 font-medium mt-0.5 truncate max-w-[160px]">
-                            📍 {order.shopName || shops.find(s => s.id === order.shopId)?.name || 'Outlet'}
-                          </div>
-                        )}
                       </td>
 
                       {/* Items */}
-                      <td className="py-3 px-4 max-w-xs">
+                      <td role="cell" className="py-3 px-4 max-w-xs record-full mobile-table-extra"><span className="record-label" aria-hidden="true">Items</span>
                         <div className="truncate text-slate-300 font-medium">{order.itemsSummary}</div>
                         <div className="text-[10px] text-slate-500">{order.itemsCount} total items</div>
                       </td>
 
+                      <td role="cell" className="order-record-mobile-payment text-slate-300">
+                        {order.paymentMethod || '—'}
+                      </td>
+
                       {/* Total Amount */}
-                      <td className="py-3 px-4 font-bold font-mono text-white text-sm">
+                      <td role="cell" className="py-3 px-4 font-bold font-mono text-white text-sm order-record-total"><span className="record-label" aria-hidden="true">Total</span>
                         ₹{order.total.toFixed(2)}
                       </td>
 
                       {/* Payment */}
-                      <td className="py-3 px-4">
+                      <td role="cell" className="py-3 px-4 mobile-table-extra"><span className="record-label" aria-hidden="true">Payment</span>
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-[#1c2433] text-slate-300 border border-[#2d3a4e]">
-                          {order.paymentMethod}
+                          {order.paymentMethod === 'Split' && order.splitBreakdown
+                            ? `Split (Cash ₹${order.splitBreakdown.cash} + UPI ₹${order.splitBreakdown.upi})`
+                            : order.paymentMethod}
                         </span>
                       </td>
 
                       {/* Status */}
-                      <td className="py-3 px-4">
+                      <td role="cell" className="py-3 px-4 mobile-table-extra"><span className="record-label" aria-hidden="true">Status</span>
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             isCompleted
@@ -239,27 +173,26 @@ export default function OrdersKDS() {
                               : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                           }`}
                         >
-                          {order.status}
+                          {order.refund ? 'Refunded' : order.status}
                         </span>
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end space-x-1.5">
+                      <td role="cell" className="py-3 px-4 text-right record-actions mobile-table-extra">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
                           <button
                             onClick={() => openModal('receipt', order)}
-                            title="View / Print Receipt"
+                            title="View / Print Receipt" aria-label="View invoice"
                             className="p-1.5 rounded-lg bg-[#1b2230] hover:bg-[#252f42] text-slate-400 hover:text-white border border-[#2b3547] transition-colors"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span className="record-action-text">Invoice</span>
                           </button>
-                          <button
-                            onClick={() => openModal('receipt', order)}
-                            title="Quick Print"
-                            className="p-1.5 rounded-lg bg-[#1b2230] hover:bg-orange-500 text-slate-400 hover:text-white border border-[#2b3547] transition-colors"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                          </button>
+                          {!isOwner && settings.allowStaffRefunds && isCompleted && (
+                            <button type="button" className="rounded border border-rose-700 px-2 py-1 text-rose-200"
+                              onClick={() => setRefundTarget(order)}>Record refund</button>
+                          )}
+
                         </div>
                       </td>
                     </tr>
@@ -270,6 +203,7 @@ export default function OrdersKDS() {
           </div>
         )}
       </div>
+      {refundTarget && <RefundDialog order={refundTarget} onClose={() => setRefundTarget(null)} />}
     </div>
   );
 }

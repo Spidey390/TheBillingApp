@@ -1,677 +1,464 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { onSnapshot } from 'firebase/firestore';
 import confetti from 'canvas-confetti';
-import {
-  initialSettings,
-  initialTables,
-  initialCategories,
-  initialProducts,
-  initialRawMaterials,
-  initialCustomers,
-  initialOrders,
-  initialSuppliers,
-  initialPurchases,
-  initialExpenses,
-  initialStaff,
-  initialAuditLogs,
-  initialAvailableAddons
-} from '../data/initialData';
+import { initialSettings, initialCategories } from '../data/initialData';
 import { playSound } from '../utils/audio';
+import { calculateBill, validateTender } from '../domain/billing';
+import { normalizePhone } from '../domain/customers';
+import { newId } from '../domain/ids';
+import { canOpen, homeView } from '../domain/access';
 import {
-  db,
-  initializeDatabase,
-  executeOrderTransaction,
-  exportDatabaseJSON,
-  importDatabaseJSON,
-  resetDatabaseToCleanProduction
+  workspaceRef, initializeWorkspace, watchConfig, watchRows, executeOrderTransaction, saveTableDraft, draftRevision,
+  deleteTable, createTable, updateSettings, syncPublicBrand, createExpense, deleteRecord,
+  saveUniqueRecord, deleteUniqueRecord, exportDatabaseJSON, importDatabaseJSON,
+  resetDatabaseToCleanProduction, refundOrder
 } from '../db/db';
 
 const AppContext = createContext();
+const emptyList = [];
+const emptyDraft = { items: [], customer: null, discountPercent: 0 };
+const currentView = role => {
+  const view = window.location.hash.slice(1);
+  return canOpen(role, view) ? view : homeView(role);
+};
 
-export function AppProvider({ children }) {
-  // Master & Transactional State
-  const [settings, setSettings] = useState(initialSettings);
-  const [tables, setTables] = useState(initialTables);
-  const [products, setProducts] = useState(initialProducts);
-  const [rawMaterials, setRawMaterials] = useState(initialRawMaterials);
-  const [customers, setCustomers] = useState(initialCustomers);
-  const [orders, setOrders] = useState(initialOrders);
-  const [suppliers, setSuppliers] = useState(initialSuppliers);
-  const [purchases, setPurchases] = useState(initialPurchases);
-  const [expenses, setExpenses] = useState(initialExpenses);
-  const [staff, setStaff] = useState(initialStaff);
-  const [auditLogs, setAuditLogs] = useState(initialAuditLogs);
+function loadCounterDrafts(key) {
+  try {
+    return JSON.parse(sessionStorage.getItem(key)) || {};
+  } catch {
+    return {};
+  }
+}
 
-  // Database Status
-  const [isDbReady, setIsDbReady] = useState(false);
-  const [dbName] = useState('Dexie IndexedDB (Offline ACID)');
+function useRows(workspace, name, enabled, onError, attempt, recordedBy) {
+  const [state, setState] = useState(null);
+  useEffect(() => {
+    if (!workspace || !enabled) return;
+    let active = true;
+    const stop = watchRows(workspace, name, rows => {
+      if (active) setState({ workspace, rows });
+    }, error => { if (active) onError(error); }, recordedBy);
+    return () => { active = false; stop(); };
+  }, [workspace, name, enabled, onError, attempt, recordedBy]);
 
-  // Navigation & Responsive State
-  const [activeView, setActiveView] = useState('pos');
+  return enabled && state?.workspace === workspace ? state.rows : emptyList;
+}
+
+export function AppProvider({ children, operator, signOut }) {
+  const isOwner = operator.role === 'owner';
+  const [workspace, setWorkspace] = useState(null);
+  const [loadedConfig, setLoadedConfig] = useState(null);
+  const [dbStatus, setDbStatus] = useState('loading');
+  const [bootAttempt, setBootAttempt] = useState(0);
+  const settings = loadedConfig?.workspace === workspace ? loadedConfig.settings : initialSettings;
+  const isDbReady = dbStatus === 'ready' && loadedConfig?.workspace === workspace;
+  const onReadError = React.useCallback(error => {
+    console.error('Could not read Firebase POS data', error);
+    setDbStatus('unavailable');
+  }, []);
+  const [activeView, setActiveView] = useState(() => currentView(operator.role));
   const [activeModal, setActiveModal] = useState(null);
   const [modalData, setModalData] = useState(null);
+  const readsOrders = ['orders', 'dashboard', 'reports'].includes(activeView);
+  const tables = useRows(workspace, 'tables', !isOwner || ['tables', 'dashboard'].includes(activeView), onReadError, bootAttempt);
+  const products = useRows(workspace, 'products', !isOwner || ['menu', 'reports', 'dashboard'].includes(activeView), onReadError, bootAttempt);
+  const customers = useRows(workspace, 'customers', !isOwner || ['customers', 'dashboard'].includes(activeView), onReadError, bootAttempt);
+  const orderRows = useRows(workspace, 'orders', readsOrders, onReadError, bootAttempt);
+  const orders = React.useMemo(() => [...orderRows].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [orderRows]);
+  const expenses = useRows(workspace, 'expenses', (['expenses', 'dashboard'].includes(activeView) || (isOwner && activeView === 'reports')), onReadError, bootAttempt, isOwner ? undefined : operator.uid);
+
   const [toast, setToast] = useState(null);
+  const toastTimeout = useRef();
+  useEffect(() => () => clearTimeout(toastTimeout.current), []);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Cart State - Clean empty initial cart
-  const [cart, setCart] = useState([]);
-  const [orderChannel, setOrderChannel] = useState('Dine-In'); // 'Dine-In', 'Takeaway', 'Delivery'
-  const [selectedTable, setSelectedTable] = useState(null);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [discountPercent, setDiscountPercent] = useState(0);
-
-  // Load from Dexie IndexedDB on startup
-  useEffect(() => {
-    async function loadFromDB() {
-      try {
-        await initializeDatabase();
-
-        // Read all tables from Dexie
-        const [
-          savedSettings,
-          savedTables,
-          savedProducts,
-          savedRaw,
-          savedCustomers,
-          savedOrders,
-          savedSuppliers,
-          savedPurchases,
-          savedExpenses,
-          savedStaff,
-          savedAudit
-        ] = await Promise.all([
-          db.settings.get('active_settings'),
-          db.diningTables.toArray(),
-          db.products.toArray(),
-          db.rawMaterials.toArray(),
-          db.customers.toArray(),
-          db.orders.reverse().sortBy('createdAt'),
-          db.suppliers.toArray(),
-          db.purchases.toArray(),
-          db.expenses.toArray(),
-          db.staff.toArray(),
-          db.auditLogs.reverse().sortBy('id')
-        ]);
-
-        if (savedSettings) setSettings(savedSettings);
-        if (savedTables?.length) setTables(savedTables);
-        if (savedProducts?.length) setProducts(savedProducts);
-        if (savedRaw?.length) setRawMaterials(savedRaw);
-        if (savedCustomers) setCustomers(savedCustomers);
-        if (savedOrders) setOrders(savedOrders);
-        if (savedSuppliers) setSuppliers(savedSuppliers);
-        if (savedPurchases) setPurchases(savedPurchases);
-        if (savedExpenses) setExpenses(savedExpenses);
-        if (savedStaff?.length) setStaff(savedStaff);
-        if (savedAudit) setAuditLogs(savedAudit);
-
-        setIsDbReady(true);
-        console.log('[Dexie IndexedDB] Successfully connected and loaded data.');
-      } catch (err) {
-        console.error('[Dexie IndexedDB] Error loading database:', err);
-        setIsDbReady(true);
-      }
-    }
-
-    loadFromDB();
-  }, []);
-
-  // Automatic Reactive Sync to Dexie IndexedDB
-  useEffect(() => {
-    if (isDbReady && settings) {
-      db.settings.put({ id: 'active_settings', ...settings }).catch(() => {});
-    }
-  }, [settings, isDbReady]);
+  const draftStorageKey = `brew-bite-counter-drafts:${operator.uid}:${workspace}`;
+  const [counterState, setCounterState] = useState(null);
+  const counterDrafts = React.useMemo(() => counterState?.key === draftStorageKey
+    ? counterState.drafts : loadCounterDrafts(draftStorageKey), [counterState, draftStorageKey]);
+  const [orderChannel, setChannel] = useState('Dine-In');
+  const [selectedTableId, setSelectedTableId] = useState(null);
+  const [isPaying, setIsPaying] = useState(false);
+  const paymentLock = useRef(false);
+  const draftLock = useRef(false);
+  const [isDraftSaving, setIsDraftSaving] = useState(false);
+  const selectedTable = tables.find(table => table.id === selectedTableId) || null;
+  const draft = (selectedTable ? selectedTable.activeOrder : counterDrafts[orderChannel]) || emptyDraft;
+  const cart = draft.items;
+  const draftVersion = draftRevision(draft);
+  const { upiVpaId, upiQrImage, payeeName } = settings;
+  const paymentRevision = React.useMemo(() => JSON.stringify([
+    workspace, selectedTableId, orderChannel, draftVersion, upiVpaId, upiQrImage, payeeName
+  ]), [workspace, selectedTableId, orderChannel, draftVersion, upiVpaId, upiQrImage, payeeName]);
+  const selectedCustomer = draft.customer;
+  const discountPercent = draft.discountPercent || 0;
+  const bill = calculateBill(cart, discountPercent);
 
   useEffect(() => {
-    if (isDbReady && tables?.length) {
-      db.diningTables.bulkPut(tables).catch(() => {});
-    }
-  }, [tables, isDbReady]);
-
-  useEffect(() => {
-    if (isDbReady && products?.length) {
-      db.products.bulkPut(products).catch(() => {});
-    }
-  }, [products, isDbReady]);
-
-  useEffect(() => {
-    if (isDbReady && rawMaterials?.length) {
-      db.rawMaterials.bulkPut(rawMaterials).catch(() => {});
-    }
-  }, [rawMaterials, isDbReady]);
-
-  useEffect(() => {
-    if (isDbReady) {
-      db.customers.clear().then(() => {
-        if (customers.length > 0) db.customers.bulkPut(customers);
-      }).catch(() => {});
-    }
-  }, [customers, isDbReady]);
-
-  useEffect(() => {
-    if (isDbReady) {
-      db.suppliers.clear().then(() => {
-        if (suppliers.length > 0) db.suppliers.bulkPut(suppliers);
-      }).catch(() => {});
-    }
-  }, [suppliers, isDbReady]);
-
-  useEffect(() => {
-    if (isDbReady) {
-      db.purchases.clear().then(() => {
-        if (purchases.length > 0) db.purchases.bulkPut(purchases);
-      }).catch(() => {});
-    }
-  }, [purchases, isDbReady]);
-
-  useEffect(() => {
-    if (isDbReady) {
-      db.expenses.clear().then(() => {
-        if (expenses.length > 0) db.expenses.bulkPut(expenses);
-      }).catch(() => {});
-    }
-  }, [expenses, isDbReady]);
-
-  useEffect(() => {
-    if (isDbReady && staff?.length) {
-      db.staff.bulkPut(staff).catch(() => {});
-    }
-  }, [staff, isDbReady]);
-
-  // Toast helper
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  // Keyboard shortcut listener
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
-        if (e.key === 'Escape') {
-          setActiveModal(null);
-        }
+    let running = true;
+    let initializing = false;
+    const unsubscribe = onSnapshot(workspaceRef, snapshot => {
+      if (snapshot.exists()) {
+        setWorkspace(snapshot.data().workspace);
         return;
       }
-
-      if (e.key === 'F1') {
-        e.preventDefault();
-        clearCart();
-        showToast('Cart Cleared (F1)');
-      } else if (e.key === 'F2') {
-        e.preventDefault();
-        const searchInput = document.getElementById('pos-search-input');
-        if (searchInput) searchInput.focus();
-      } else if (e.key === 'F4') {
-        e.preventDefault();
-        if (cart.length > 0) {
-          openModal('payment');
-        } else {
-          showToast('Cart is empty', 'warning');
-        }
-      } else if (e.key === 'F8') {
-        e.preventDefault();
-        openModal('tableSelect');
-      } else if (e.key === 'Escape') {
-        setActiveModal(null);
-        setIsMobileCartOpen(false);
-        setIsMobileMenuOpen(false);
+      if (snapshot.metadata.fromCache || initializing) return;
+      if (!isOwner) {
+        setDbStatus('setup-required');
+        return;
       }
-    };
+      initializing = true;
+      initializeWorkspace().catch(error => { if (running) onReadError(error); });
+    }, onReadError);
+    return () => { running = false; unsubscribe(); };
+  }, [isOwner, bootAttempt, onReadError]);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cart]);
+  useEffect(() => {
+    if (!workspace) return;
+    setSelectedTableId(null);
+    setActiveModal(null);
+    return watchConfig(workspace, next => {
+      setLoadedConfig({ workspace, settings: next });
+      setDbStatus('ready');
+    }, onReadError);
+  }, [workspace, bootAttempt, onReadError]);
 
-  // Cart Calculations
-  const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const discountAmount = Number(((cartSubtotal * discountPercent) / 100).toFixed(2));
-  const discountedSubtotal = cartSubtotal - discountAmount;
-  const cgstAmount = Number(((discountedSubtotal * (settings.gstRate / 2)) / 100).toFixed(2));
-  const sgstAmount = Number(((discountedSubtotal * (settings.gstRate / 2)) / 100).toFixed(2));
-  const cartTotal = Number((discountedSubtotal + cgstAmount + sgstAmount).toFixed(2));
-
-  // Audio helper
-  const triggerAudio = (sound = 'beep') => {
-    playSound(sound, settings.audioBeepsEnabled);
-  };
-
-  // Cart Actions
-  const addToCart = (product, variant = null, selectedAddons = [], note = '') => {
-    triggerAudio('beep');
-    const addonPrice = selectedAddons.reduce((sum, a) => sum + a.price, 0);
-    const basePrice = variant ? variant.price : product.price;
-    const finalPrice = basePrice + addonPrice;
-
-    // Check if duplicate item exists with identical variant and addons
-    const existingIndex = cart.findIndex(item => 
-      item.productId === product.id &&
-      item.variant === (variant ? variant.name : null) &&
-      JSON.stringify(item.addons.sort()) === JSON.stringify(selectedAddons.map(a => a.name).sort()) &&
-      item.note === note
-    );
-
-    if (existingIndex > -1) {
-      const updated = [...cart];
-      updated[existingIndex].quantity += 1;
-      setCart(updated);
-    } else {
-      const newItem = {
-        id: 'cart-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-        productId: product.id,
-        name: product.name,
-        variant: variant ? variant.name : null,
-        addons: selectedAddons.map(a => a.name),
-        addonPrice,
-        basePrice,
-        price: finalPrice,
-        quantity: 1,
-        note
-      };
-      setCart([...cart, newItem]);
+  useEffect(() => {
+    if (workspace && isOwner) {
+      syncPublicBrand(workspace).catch(error => console.warn('Could not publish the cafe name', error));
     }
-    showToast(`Added ${product.name} to bill`);
-  };
+  }, [workspace, isOwner]);
 
-  const updateCartQuantity = (cartItemId, delta) => {
-    triggerAudio(delta > 0 ? 'beep' : 'remove');
-    setCart(prev => {
-      return prev.map(item => {
-        if (item.id === cartItemId) {
-          const newQty = item.quantity + delta;
-          return newQty > 0 ? { ...item, quantity: newQty } : null;
-        }
-        return item;
-      }).filter(Boolean);
+  useEffect(() => {
+    const navigate = () => {
+      const view = currentView(operator.role);
+      setActiveView(view);
+      if (!paymentLock.current) setActiveModal(null);
+      if (view !== 'pos') setIsMobileCartOpen(false);
+      setIsMobileMenuOpen(false);
+    };
+    window.addEventListener('hashchange', navigate);
+    return () => window.removeEventListener('hashchange', navigate);
+  }, [operator.role]);
+
+  function navigate(view) {
+    if (!canOpen(operator.role, view) || paymentLock.current) return;
+    if (view !== activeView) window.location.hash = view;
+    setActiveView(view);
+    setIsMobileCartOpen(false);
+    setIsMobileMenuOpen(false);
+  }
+
+  function showToast(message, type = 'success') {
+    clearTimeout(toastTimeout.current);
+    setToast({ message, type });
+    toastTimeout.current = setTimeout(() => setToast(null), 4000);
+  }
+
+  async function commit(action, message) {
+    if (!isDbReady) {
+      showToast('Database unavailable. Try reconnecting before making changes.', 'error');
+      return false;
+    }
+    try {
+      await action();
+      if (message) showToast(message);
+      return true;
+    } catch (error) {
+      showToast(error.message || 'The change could not be saved. Try again.', 'error');
+      return false;
+    }
+  }
+
+  function updateCounterDrafts(next) {
+    setCounterState({ key: draftStorageKey, drafts: next });
+    try {
+      sessionStorage.setItem(draftStorageKey, JSON.stringify(next));
+    } catch {
+      showToast('Browser storage could not save the counter draft across reloads.', 'warning');
+    }
+  }
+
+  function buildDraft(current, changes) {
+    const next = { ...current, ...changes };
+    if (!next.items.length && !next.customer && !next.discountPercent) return null;
+    return {
+      ...next,
+      id: current.id || newId(),
+      revision: newId(),
+      ...calculateBill(next.items, next.discountPercent || 0),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  async function writeDraft(table, current, changes, message) {
+    if (isOwner || draftLock.current || paymentLock.current) return false;
+    const next = buildDraft(current, changes);
+    if (!table) {
+      updateCounterDrafts({ ...counterDrafts, [orderChannel]: next });
+      if (message) showToast(message);
+      return true;
+    }
+
+    draftLock.current = true;
+    setIsDraftSaving(true);
+    try {
+      return await commit(
+        () => saveTableDraft(workspace, table.id, draftRevision(table.activeOrder), next),
+        message
+      );
+    } finally {
+      draftLock.current = false;
+      setIsDraftSaving(false);
+    }
+  }
+
+  async function selectTable(table) {
+    if (isOwner || draftLock.current || paymentLock.current) return false;
+    const current = table && tables.find(row => row.id === table.id);
+    if (table && !current) return false;
+    const counter = counterDrafts['Dine-In'];
+    if (current && !current.activeOrder?.items.length && counter?.items.length &&
+        window.confirm(`Move the current dine-in bill to ${current.name}? Cancel keeps the bill at the counter.`)) {
+      if (!await writeDraft(current, counter, {})) return false;
+      updateCounterDrafts({ ...counterDrafts, 'Dine-In': null });
+    }
+    setSelectedTableId(current?.id ?? null);
+    if (current) setChannel('Dine-In');
+    return true;
+  }
+
+  function setOrderChannel(channel) {
+    if (isOwner || channel === orderChannel || paymentLock.current || draftLock.current) return;
+    setSelectedTableId(null);
+    setChannel(channel);
+  }
+
+  function triggerAudio(sound = 'beep') {
+    playSound(sound, settings.audioBeepsEnabled);
+  }
+
+  function addToCart(product, variant = null, selectedAddons = [], note = '') {
+    const addonNames = selectedAddons.map(addon => addon.name);
+    const addonPrice = selectedAddons.reduce((sum, addon) => sum + addon.price, 0);
+    const basePrice = variant ? variant.price : product.price;
+    const price = basePrice + addonPrice;
+    const existing = cart.find(item =>
+      item.productId === product.id && item.variant === (variant?.name ?? null) &&
+      item.price === price && item.note === note &&
+      JSON.stringify([...(item.addons ?? [])].sort()) === JSON.stringify([...addonNames].sort())
+    );
+    const items = existing
+      ? cart.map(item => item.id === existing.id ? { ...item, quantity: item.quantity + 1 } : item)
+      : [...cart, {
+          id: newId(), productId: product.id, name: product.name, category: product.category,
+          variant: variant?.name ?? null, addons: addonNames, addonPrice, basePrice, price, quantity: 1, note
+        }];
+    return writeDraft(selectedTable, draft, { items }, `Added ${product.name} to bill`).then(saved => {
+      if (saved) triggerAudio();
+      return saved;
     });
-  };
+  }
 
-  const removeCartItem = (cartItemId) => {
-    triggerAudio('remove');
-    setCart(prev => prev.filter(i => i.id !== cartItemId));
-  };
+  function editItems(table, transform) {
+    const current = table ? table.activeOrder || emptyDraft : draft;
+    return writeDraft(table, current, { items: transform(current.items) });
+  }
 
-  const updateCartItemNote = (cartItemId, note) => {
-    setCart(prev => prev.map(item => item.id === cartItemId ? { ...item, note } : item));
-  };
+  const adjustQuantity = (items, id, delta) => items
+    .map(item => item.id === id ? { ...item, quantity: item.quantity + delta } : item)
+    .filter(item => item.quantity > 0);
+  const removeItem = (items, id) => items.filter(item => item.id !== id);
+  const tableById = id => tables.find(row => row.id === id);
 
-  const clearCart = () => {
-    setCart([]);
-    setSelectedTable(null);
-    setSelectedCustomer(null);
-    setDiscountPercent(0);
-  };
+  function editTableItems(id, transform) {
+    const table = tableById(id);
+    if (table) return editItems(table, transform);
+  }
 
-  const openModal = (modalName, data = null) => {
+  async function clearCart() {
+    if (cart.length && !window.confirm('Discard all items in this bill?')) return;
+    if (await writeDraft(selectedTable, draft, emptyDraft)) setSelectedTableId(null);
+  }
+
+  function clearTableOrder(id) {
+    const table = tableById(id);
+    if (table) return writeDraft(table, table.activeOrder || emptyDraft, emptyDraft, `Order cleared for ${table.name}`);
+  }
+
+  function openModal(name, data = null) {
     setModalData(data);
-    setActiveModal(modalName);
-  };
+    setActiveModal(name);
+  }
 
-  const closeModal = () => {
+  function closeModal() {
+    if (paymentLock.current) return;
     setActiveModal(null);
     setModalData(null);
-  };
+  }
 
-  // Complete Order with ACID Dexie Transaction
-  const completePayment = async (paymentMethod = 'UPI', amountReceived = null, referenceNo = '') => {
-    if (cart.length === 0) return;
+  function reviewTableCart(table) {
+    if (isOwner) return;
+    const current = tableById(table.id);
+    if (!current?.activeOrder?.items.length) {
+      showToast('This table has no active order to bill.', 'warning');
+      return;
+    }
+    if (draftLock.current || paymentLock.current) return;
+    setSelectedTableId(current.id);
+    setChannel('Dine-In');
+    navigate('pos');
+    setIsMobileCartOpen(!window.matchMedia('(min-width: 1024px)').matches);
+  }
 
-    // Generate Invoice Number
-    const nextOrderNum = orders.length + 1001;
-    const invoiceNo = `${settings.invoicePrefix}${nextOrderNum}`;
-    const tokenNo = (orders.length % 99) + 101;
+  function setCartCustomer(customer, expectedRevision = paymentRevision) {
+    if (expectedRevision !== paymentRevision || (selectedTableId && !selectedTable)) {
+      showToast('The bill changed. Review the cart before updating the customer.', 'error');
+      return false;
+    }
+    return writeDraft(selectedTable, draft, { customer });
+  }
 
-    const newOrder = {
-      id: `ord-${Date.now()}`,
-      invoiceNo,
-      tokenNo,
-      createdAt: new Date().toISOString(),
-      displayDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' +
-                   new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase(),
-      channel: orderChannel,
-      table: selectedTable ? selectedTable.name : '',
-      tableId: selectedTable ? selectedTable.id : null,
-      customerName: selectedCustomer ? selectedCustomer.name : 'Walk-in Guest',
-      customerPhone: selectedCustomer ? selectedCustomer.phone : '',
-      items: cart.map(item => ({
-        id: item.productId,
-        name: item.name,
-        variant: item.variant,
-        addons: item.addons,
-        note: item.note,
-        price: item.price,
-        quantity: item.quantity,
-        total: item.price * item.quantity
-      })),
-      itemsSummary: cart.map(i => `${i.quantity}x ${i.name}`).join(', '),
-      itemsCount: cart.reduce((s, i) => s + i.quantity, 0),
-      subtotal: cartSubtotal,
-      cgst: cgstAmount,
-      sgst: sgstAmount,
-      discount: discountAmount,
-      total: cartTotal,
-      paymentMethod,
-      amountReceived: amountReceived || cartTotal,
-      referenceNo,
-      status: 'Completed',
-      cashierName: `${settings.ownerName} (Owner)`
-    };
+  async function completePayment(paymentMethod, amountReceived, referenceNo, splitBreakdown, expectedRevision) {
+    if (isOwner || paymentLock.current || draftLock.current) return false;
+    if (expectedRevision !== paymentRevision || !isDbReady || !cart.length || (selectedTableId && !selectedTable) ||
+        (selectedTable && orderChannel !== 'Dine-In')) {
+      showToast('The bill is unavailable. Review the current order before settling.', 'error');
+      return false;
+    }
+    const tenderError = validateTender(paymentMethod, bill.total, amountReceived, splitBreakdown);
+    if (tenderError) {
+      showToast(tenderError, 'error');
+      return false;
+    }
 
-    // Calculate BOM Deductions
-    const rawDeductions = [];
-    const newAuditEntries = [];
-    let updatedRaw = [...rawMaterials];
+    paymentLock.current = true;
+    setIsPaying(true);
+    try {
+      const now = new Date();
+      const { brandName, streetAddress, city, state, pincode, phone, receiptFooterMessage,
+        termsAndConditions, license } = settings;
+      const order = await executeOrderTransaction(workspace, {
+        order: {
+          id: draft.id ? `ord-${draft.id}` : `ord-legacy-${selectedTable.id}-${draftRevision(draft)}`,
+          draftRevision: draftRevision(draft),
+          createdAt: now.toISOString(),
+          displayDate: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' +
+            now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase(),
+          channel: orderChannel, table: selectedTable?.name ?? '', tableId: selectedTable?.id ?? null,
+          customerName: selectedCustomer?.name ?? 'Walk-in Guest', customerPhone: selectedCustomer?.phone ?? '',
+          items: cart.map(({ productId, name, category, variant, addons, note, price, quantity }) =>
+            ({ id: productId, name, category, variant, addons, note, price, quantity, total: price * quantity })),
+          itemsSummary: cart.map(item => `${item.quantity}x ${item.name}`).join(', '),
+          itemsCount: cart.reduce((total, item) => total + item.quantity, 0),
+          ...bill,
+          merchant: { brandName, streetAddress, city, state, pincode, phone, receiptFooterMessage,
+            termsAndConditions, license },
+          paymentMethod, splitBreakdown, amountReceived, referenceNo,
+          status: 'Completed', cashierName: operator.name || operator.email, cashierUid: operator.uid
+        },
+        tableRevision: draftRevision(draft),
+        customerId: selectedCustomer?.id
+      });
 
-    if (settings.autoBOMDeduction) {
-      cart.forEach(cartItem => {
-        const prod = products.find(p => p.id === cartItem.productId);
-        if (prod && prod.bom && prod.bom.length > 0) {
-          prod.bom.forEach(bomItem => {
-            const deductQty = bomItem.qty * cartItem.quantity;
-            rawDeductions.push({
-              rawId: bomItem.rawId,
-              deductQty,
-              unit: bomItem.unit
-            });
-
-            const rawIdx = updatedRaw.findIndex(r => r.id === bomItem.rawId);
-            if (rawIdx > -1) {
-              const prev = updatedRaw[rawIdx].currentStock;
-              const next = Math.max(0, Number((prev - deductQty).toFixed(3)));
-              updatedRaw[rawIdx] = {
-                ...updatedRaw[rawIdx],
-                currentStock: next,
-                status: next <= updatedRaw[rawIdx].minThreshold ? 'Low Stock' : 'Sufficient'
-              };
-
-              newAuditEntries.push({
-                id: 'log-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5),
-                timestamp: new Date().toLocaleString(),
-                type: 'Recipe Deduction',
-                itemType: 'Raw Material',
-                changeQty: `-${deductQty} ${bomItem.unit}`,
-                previousStock: `${prev} ${bomItem.unit}`,
-                newStock: `${next} ${bomItem.unit}`,
-                notes: `Order ${invoiceNo}: ${cartItem.quantity}x ${cartItem.name} auto-deduction`,
-                user: settings.ownerName
-              });
-            }
-          });
+      if (!selectedTable) updateCounterDrafts({ ...counterDrafts, [orderChannel]: null });
+      setSelectedTableId(null);
+      setIsMobileCartOpen(false);
+      openModal('receipt', order);
+      showToast(`Order ${order.invoiceNo} saved and completed.`);
+      try {
+        triggerAudio('checkout');
+        if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          confetti({ particleCount: 75, spread: 60, origin: { y: 0.7 } });
         }
-      });
-    }
-
-    // Customer CRM Update
-    let customerUpdate = null;
-    if (selectedCustomer) {
-      const updatedSpend = Number((selectedCustomer.totalSpent + cartTotal).toFixed(2));
-      const updatedVisits = selectedCustomer.ordersCount + 1;
-      customerUpdate = {
-        ...selectedCustomer,
-        ordersCount: updatedVisits,
-        totalSpent: updatedSpend,
-        avgOrderValue: Number((updatedSpend / updatedVisits).toFixed(1))
-      };
-    }
-
-    // Table Update
-    const tableUpdate = (selectedTable && orderChannel === 'Dine-In')
-      ? { id: selectedTable.id, status: 'Occupied' }
-      : null;
-
-    // Execute ACID Dexie Transaction
-    try {
-      await executeOrderTransaction({
-        order: newOrder,
-        rawDeductions,
-        auditLogs: newAuditEntries,
-        customerUpdate,
-        tableUpdate
-      });
-
-      // Update in-memory state
-      setOrders([newOrder, ...orders]);
-      if (settings.autoBOMDeduction) {
-        setRawMaterials(updatedRaw);
-        if (newAuditEntries.length > 0) {
-          setAuditLogs(prev => [...newAuditEntries, ...prev]);
-        }
+      } catch (error) {
+        console.warn('Checkout effects unavailable', error);
       }
-      if (customerUpdate) {
-        setCustomers(prev => prev.map(c => c.id === customerUpdate.id ? customerUpdate : c));
-      }
-      if (tableUpdate) {
-        setTables(prev => prev.map(t => t.id === tableUpdate.id ? { ...t, status: 'Occupied' } : t));
-      }
-    } catch (err) {
-      console.error('[Dexie IndexedDB] Order transaction failed:', err);
-      // Fallback state update
-      setOrders([newOrder, ...orders]);
+      return true;
+    } catch (error) {
+      console.error('Order settlement failed', error);
+      showToast(error.code ? 'Bill was not saved. Keep the tender details and retry saving.' : error.message, 'error');
+      return false;
+    } finally {
+      paymentLock.current = false;
+      setIsPaying(false);
     }
+  }
 
-    // Audio & Confetti
-    triggerAudio('checkout');
-    confetti({
-      particleCount: 75,
-      spread: 60,
-      origin: { y: 0.7 }
-    });
+  function clearWorkspace() {
+    updateCounterDrafts({});
+    setSelectedTableId(null);
+    setChannel('Dine-In');
+    setActiveModal(null);
+    setModalData(null);
+  }
 
-    // Reset Cart
-    clearCart();
-    setIsMobileCartOpen(false);
+  async function exportDatabase() {
+    await commit(async () => {
+      const data = await exportDatabaseJSON(workspace);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `brew-bite-pos-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'Database backup downloaded.');
+  }
 
-    // Show Receipt Modal for this new order
-    openModal('receipt', newOrder);
-    showToast(`Order ${invoiceNo} saved to IndexedDB & completed!`);
-  };
+  async function restoreWorkspace(action, message) {
+    if (paymentLock.current || draftLock.current) return false;
+    const saved = await commit(action, message);
+    if (saved) clearWorkspace();
+    return saved;
+  }
 
-  // Reset to Clean Production State (Zero Mock Data)
-  const resetDemoData = async () => {
-    try {
-      await resetDatabaseToCleanProduction();
-      setSettings(initialSettings);
-      setTables(initialTables);
-      setProducts(initialProducts);
-      setRawMaterials(initialRawMaterials);
-      setCustomers([]);
-      setOrders([]);
-      setSuppliers([]);
-      setPurchases([]);
-      setExpenses([]);
-      setStaff(initialStaff);
-      setAuditLogs([]);
-      clearCart();
-      showToast('Database reset to clean production state (Zero Mock Data)!');
-    } catch (err) {
-      console.error('Reset error:', err);
-      showToast('Failed to reset database', 'error');
+  function saveCustomer(customer) {
+    const phone = normalizePhone(customer.phone);
+    if (!phone) {
+      showToast('Enter a valid phone number.', 'error');
+      return false;
     }
-  };
-
-  // Export Database JSON from IndexedDB
-  const exportDatabase = async () => {
-    try {
-      const data = await exportDatabaseJSON();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `brew-bite-pos-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast('IndexedDB database backup JSON downloaded!');
-    } catch (err) {
-      console.error('Export error:', err);
-      showToast('Export failed', 'error');
-    }
-  };
-
-  // Import Database JSON into IndexedDB
-  const importDatabase = async (jsonString) => {
-    try {
-      const parsed = JSON.parse(jsonString);
-      await importDatabaseJSON(parsed);
-      
-      // Refresh memory state
-      if (parsed.settings) setSettings(parsed.settings);
-      if (parsed.tables) setTables(parsed.tables);
-      if (parsed.products) setProducts(parsed.products);
-      if (parsed.rawMaterials) setRawMaterials(parsed.rawMaterials);
-      if (parsed.customers) setCustomers(parsed.customers);
-      if (parsed.orders) setOrders(parsed.orders);
-      if (parsed.suppliers) setSuppliers(parsed.suppliers);
-      if (parsed.purchases) setPurchases(parsed.purchases);
-      if (parsed.expenses) setExpenses(parsed.expenses);
-      if (parsed.staff) setStaff(parsed.staff);
-      if (parsed.auditLogs) setAuditLogs(parsed.auditLogs);
-
-      showToast('IndexedDB restored from backup successfully!');
-    } catch (err) {
-      console.error('Import error:', err);
-      showToast('Failed to import database file: ' + err.message, 'error');
-    }
-  };
-
-  // Menu items cannot be deleted
-  const deleteProduct = () => {
-    showToast('Menu items are protected and cannot be deleted', 'warning');
-  };
-
-  // Raw Material Stock Adjust with DB write
-  const adjustRawStock = async (rawId, changeQty, reason = 'Manual audit adjustment') => {
-    const raw = rawMaterials.find(r => r.id === rawId);
-    if (!raw) return;
-    const prev = raw.currentStock;
-    const next = Math.max(0, Number((prev + changeQty).toFixed(3)));
-    const newStatus = next <= raw.minThreshold ? 'Low Stock' : 'Sufficient';
-
-    const logEntry = {
-      id: 'log-' + Date.now(),
-      timestamp: new Date().toLocaleString(),
-      type: changeQty >= 0 ? 'Stock Addition' : 'Manual Audit',
-      itemType: 'Raw Material',
-      changeQty: `${changeQty >= 0 ? '+' : ''}${changeQty} ${raw.unit}`,
-      previousStock: `${prev} ${raw.unit}`,
-      newStock: `${next} ${raw.unit}`,
-      notes: reason,
-      user: settings.ownerName
-    };
-
-    try {
-      await db.transaction('rw', [db.rawMaterials, db.auditLogs], async () => {
-        await db.rawMaterials.update(rawId, {
-          currentStock: next,
-          status: newStatus
-        });
-        await db.auditLogs.put(logEntry);
-      });
-    } catch (err) {
-      console.error('Stock adjust DB error:', err);
-    }
-
-    setRawMaterials(prevList => prevList.map(r => {
-      if (r.id === rawId) {
-        return { ...r, currentStock: next, status: newStatus };
-      }
-      return r;
-    }));
-
-    setAuditLogs(prev => [logEntry, ...prev]);
-    showToast(`Stock updated for ${raw.name}`);
-  };
-
-  // Update Settings in DB
-  const updateSettings = async (newSettings) => {
-    setSettings(newSettings);
-    try {
-      await db.settings.put({ id: 'active_settings', ...newSettings });
-      showToast('Settings saved to database');
-    } catch (err) {
-      console.error('Failed to save settings:', err);
-    }
-  };
+    return commit(() => saveUniqueRecord(workspace, 'customers', { ...customer, phone }), 'Customer saved.');
+  }
 
   return (
-    <AppContext.Provider
-      value={{
-        isDbReady,
-        dbName,
-        settings,
-        setSettings: updateSettings,
-        tables,
-        setTables,
-        categories: initialCategories,
-        products,
-        setProducts,
-        deleteProduct,
-        rawMaterials,
-        setRawMaterials,
-        customers,
-        setCustomers,
-        orders,
-        setOrders,
-        suppliers,
-        setSuppliers,
-        purchases,
-        setPurchases,
-        expenses,
-        setExpenses,
-        staff,
-        setStaff,
-        auditLogs,
-        setAuditLogs,
-        addons: initialAvailableAddons,
-
-        activeView,
-        setActiveView,
-        activeModal,
-        openModal,
-        closeModal,
-        modalData,
-        toast,
-        showToast,
-        isSidebarCollapsed,
-        setIsSidebarCollapsed,
-        isMobileCartOpen,
-        setIsMobileCartOpen,
-        isMobileMenuOpen,
-        setIsMobileMenuOpen,
-
-        cart,
-        addToCart,
-        updateCartQuantity,
-        removeCartItem,
-        updateCartItemNote,
-        clearCart,
-        orderChannel,
-        setOrderChannel,
-        selectedTable,
-        setSelectedTable,
-        selectedCustomer,
-        setSelectedCustomer,
-        discountPercent,
-        setDiscountPercent,
-        cartSubtotal,
-        discountAmount,
-        cgstAmount,
-        sgstAmount,
-        cartTotal,
-
-        completePayment,
-        resetDemoData,
-        exportDatabase,
-        importDatabase,
-        adjustRawStock,
-        triggerAudio
-      }}
-    >
-      {children}
-    </AppContext.Provider>
+    <AppContext.Provider value={{
+      dbStatus, isDbReady, dbName: 'Cloud Firestore', operator, isOwner, signOut,
+      retryDatabase: () => { setDbStatus('loading'); setBootAttempt(attempt => attempt + 1); },
+      settings, tables, products, customers, orders, expenses,
+      categories: initialCategories,
+      setSettings: changes => commit(() => updateSettings(workspace, changes), 'Settings saved.'),
+      createTable: table => commit(() => createTable(workspace, table), 'Table created.'),
+      deleteTable: id => commit(() => deleteTable(workspace, id), 'Table removed.'),
+      saveProduct: product => commit(() => saveUniqueRecord(workspace, 'products', product), 'Product saved.'),
+      deleteProduct: id => commit(() => deleteUniqueRecord(workspace, 'products', id), 'Product removed.'),
+      saveCustomer, deleteCustomer: id => commit(() => deleteUniqueRecord(workspace, 'customers', id), 'Customer removed.'),
+      saveExpense: record => commit(() => createExpense(workspace, { ...record, recordedBy: operator.uid, recordedByName: operator.name || operator.email }), 'Expense recorded.'),
+      deleteExpense: id => commit(() => deleteRecord(workspace, 'expenses', id), 'Expense removed.'),
+      activeView, setActiveView: navigate, activeModal, openModal, closeModal, modalData, toast, showToast,
+      isSidebarCollapsed, setIsSidebarCollapsed, isMobileCartOpen, setIsMobileCartOpen, isMobileMenuOpen, setIsMobileMenuOpen,
+      cart, addToCart, clearCart, orderChannel, setOrderChannel, selectedTable, setSelectedTable: selectTable,
+      selectedCustomer, discountPercent,
+      setCartCustomer,
+      setDiscountPercent: discount => settings.allowCashierDiscounts &&
+        writeDraft(selectedTable, draft, { discountPercent: discount }),
+      updateCartQuantity: (id, delta) => editItems(selectedTable, items => adjustQuantity(items, id, delta)),
+      removeCartItem: id => editItems(selectedTable, items => removeItem(items, id)),
+      updateCartItemNote: (id, note) => editItems(selectedTable,
+        items => items.map(item => item.id === id ? { ...item, note } : item)),
+      updateTableItemQuantity: (tableId, id, delta) => editTableItems(tableId, items => adjustQuantity(items, id, delta)),
+      removeTableItem: (tableId, id) => editTableItems(tableId, items => removeItem(items, id)),
+      clearTableOrder, reviewTableCart, isPaying, isDraftSaving, paymentRevision,
+      refundOrder: (order, reason) => commit(() => refundOrder(workspace, order, {
+        reason, recordedAt: new Date().toISOString(), cashierUid: operator.uid, cashierName: operator.name || operator.email
+      }), 'Full refund recorded.'),
+      cartSubtotal: bill.subtotal, discountAmount: bill.discount,
+      cartTotal: bill.total, completePayment, exportDatabase, triggerAudio,
+      importDatabase: text => restoreWorkspace(() => importDatabaseJSON(workspace, JSON.parse(text)), 'Database restored.'),
+      resetDemoData: () => restoreWorkspace(() => resetDatabaseToCleanProduction(workspace), 'Database reset.')
+    }}>{children}</AppContext.Provider>
   );
 }
 

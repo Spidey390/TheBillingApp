@@ -1,37 +1,13 @@
 import React from 'react';
-import {
-  LayoutDashboard,
-  Zap,
-  CheckSquare,
-  Grid2X2,
-  UtensilsCrossed,
-  PackageCheck,
-  Users,
-  Truck,
-  Wallet,
-  BarChart3,
-  UserCheck,
-  Settings
-} from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { canOpen } from '../../domain/access';
+import { navigationItems } from './navigationItems';
 
-export default function Sidebar({ onNavigate }) {
-  const { activeView, setActiveView, isSidebarCollapsed } = useApp();
+export default function Sidebar({ onNavigate, mobile = false }) {
+  const { activeView, setActiveView, isSidebarCollapsed, operator, isPaying, signOut } = useApp();
 
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'pos', label: 'POS / New Bill', icon: Zap },
-    { id: 'orders', label: 'Orders & KDS', icon: CheckSquare },
-    { id: 'tables', label: 'Tables Floor', icon: Grid2X2 },
-    { id: 'menu', label: 'Menu & Products', icon: UtensilsCrossed },
-    { id: 'inventory', label: 'Inventory & BOM', icon: PackageCheck },
-    { id: 'customers', label: 'Customers CRM', icon: Users },
-    { id: 'suppliers', label: 'Suppliers & Purchases', icon: Truck },
-    { id: 'expenses', label: 'Expenses', icon: Wallet },
-    { id: 'reports', label: 'Reports & GST', icon: BarChart3 },
-    { id: 'staff', label: 'Staff & Roles', icon: UserCheck },
-    { id: 'settings', label: 'Cafe Settings', icon: Settings },
-  ];
+  const collapsed = !mobile && isSidebarCollapsed;
 
   const handleSelect = (id) => {
     setActiveView(id);
@@ -39,41 +15,51 @@ export default function Sidebar({ onNavigate }) {
   };
 
   return (
-    <aside 
-      className={`${
-        isSidebarCollapsed ? 'w-16' : 'w-56'
-      } bg-[#10141d] border-r border-[#202735] flex flex-col justify-between select-none shrink-0 h-full transition-all duration-200 overflow-hidden`}
-    >
+    <nav aria-label="Workspace navigation"
+      className={`flex min-h-0 flex-col select-none ${mobile ? 'w-full flex-1' :
+        `h-full shrink-0 border-r border-[#202735] bg-[#10141d] transition-[width] duration-200 ${collapsed ? 'w-16' : 'w-56'}`}`}>
       {/* Navigation List */}
-      <nav className="p-2 sm:p-2.5 space-y-1 overflow-y-auto flex-1">
-        {menuItems.map((item) => {
+      <div className={`min-h-0 flex-1 overflow-y-auto ${mobile ? 'space-y-0.5 px-3 py-2.5' : 'space-y-1 p-2 sm:p-2.5'}`}>
+        {navigationItems.filter(item => canOpen(operator.role, item.id)).map((item) => {
           const Icon = item.icon;
           const isActive = activeView === item.id;
           return (
             <button
-              key={item.id}
+              key={item.id} type="button"
               onClick={() => handleSelect(item.id)}
-              title={isSidebarCollapsed ? item.label : undefined}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed ? 'justify-center px-0 py-2.5' : 'space-x-3 px-3 py-2'
-              } rounded-xl text-xs font-semibold transition-all ${
+              title={collapsed ? item.label : undefined}
+              aria-label={item.label} aria-current={isActive ? 'page' : undefined}
+              className={`flex w-full items-center rounded-xl font-semibold transition-colors ${
+                mobile ? 'min-h-11 gap-3 px-3 py-2 text-sm' : collapsed ? 'justify-center py-2.5 text-xs' : 'gap-3 px-3 py-2 text-xs'
+              } ${
                 isActive
-                  ? 'bg-gradient-to-r from-orange-500/20 to-orange-500/5 text-orange-400 border border-orange-500/30 shadow-sm shadow-orange-950/20 font-bold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#171d28] border border-transparent'
+                  ? mobile
+                    ? 'bg-orange-500/10 text-orange-200'
+                    : 'border border-orange-500/30 bg-gradient-to-r from-orange-500/20 to-orange-500/5 font-bold text-orange-400 shadow-sm shadow-orange-950/20'
+                  : `text-slate-300 hover:bg-[#1b2230] hover:text-white ${mobile ? '' : 'border border-transparent'}`
               }`}
             >
-              <Icon 
-                className={`w-4 h-4 shrink-0 ${
-                  isActive ? 'text-orange-400 stroke-[2.5]' : 'text-slate-500'
-                }`} 
+              <Icon aria-hidden="true"
+                className={`shrink-0 ${mobile ? 'size-[1.125rem]' : 'size-4'} ${
+                  isActive ? 'text-orange-400' : 'text-slate-400'
+                }`}
               />
-              {!isSidebarCollapsed && (
+              {!collapsed && (
                 <span className="truncate">{item.label}</span>
               )}
             </button>
           );
         })}
-      </nav>
-    </aside>
+      </div>
+      <div className={`shrink-0 border-t border-slate-700/60 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] ${
+        mobile ? 'px-3' : 'px-2 sm:px-2.5'
+      }`}>
+        <button type="button" aria-label="Sign out" title={collapsed ? 'Sign out' : undefined} disabled={isPaying} onClick={signOut}
+          className={`flex min-h-11 w-full items-center gap-3 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-50 ${collapsed ? 'justify-center' : 'px-3'}`}>
+          <LogOut className={`shrink-0 text-slate-400 ${mobile ? 'size-[1.125rem]' : 'size-4'}`} aria-hidden="true" />
+          {!collapsed && <span>Sign out</span>}
+        </button>
+      </div>
+    </nav>
   );
 }

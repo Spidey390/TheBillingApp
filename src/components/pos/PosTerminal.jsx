@@ -1,12 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   UtensilsCrossed, 
   ShoppingBag, 
   Truck, 
   Grid2X2, 
-  UserPlus, 
-  User, 
   Plus, 
   Minus, 
   Trash2, 
@@ -15,13 +13,29 @@ import {
   X,
   CreditCard,
   MessageSquare,
-  ArrowRight
+  ArrowRight,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronRight,
+  UserRound
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import Dialog from '../layout/Dialog';
+import FilterDialog from '../layout/FilterDialog';
+import CustomerSelectModal from './CustomerSelectModal';
+
+const allItems = 'All Items';
+const orderChannels = [
+  { value: 'Dine-In', label: 'Dine-in', icon: UtensilsCrossed },
+  { value: 'Takeaway', label: 'Takeaway', icon: ShoppingBag },
+  { value: 'Delivery', label: 'Delivery', icon: Truck }
+];
+const linkedControl = 'flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 text-left text-xs font-semibold hover:bg-slate-700/40 sm:text-sm';
+const unlinkControl = 'grid size-11 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-700/50 hover:text-white';
 
 export default function PosTerminal() {
   const {
-    products,
+    products, settings, isDraftSaving,
     categories,
     cart,
     addToCart,
@@ -34,13 +48,12 @@ export default function PosTerminal() {
     selectedTable,
     setSelectedTable,
     selectedCustomer,
-    setSelectedCustomer,
+    setCartCustomer,
+    paymentRevision,
     discountPercent,
     setDiscountPercent,
     cartSubtotal,
     discountAmount,
-    cgstAmount,
-    sgstAmount,
     cartTotal,
     openModal,
     showToast,
@@ -49,25 +62,46 @@ export default function PosTerminal() {
     setIsMobileCartOpen
   } = useApp();
 
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const closeDrawer = event => { if (event.matches) setIsMobileCartOpen(false); };
+    desktop.addEventListener('change', closeDrawer);
+    return () => desktop.removeEventListener('change', closeDrawer);
+  }, [setIsMobileCartOpen]);
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState('All Items');
+  const [activeCategory, setActiveCategory] = useState(allItems);
+  const [showCategories, setShowCategories] = useState(false);
+  const [showOrderTypes, setShowOrderTypes] = useState(false);
+  const [customerPickerRevision, setCustomerPickerRevision] = useState(null);
+  const { label: orderType, icon: OrderTypeIcon } = orderChannels.find(channel => channel.value === orderChannel) ?? orderChannels[0];
+
+  const categoryOptions = useMemo(() => {
+    const counts = new Map();
+    for (const product of products) {
+      counts.set(product.category, (counts.get(product.category) ?? 0) + 1);
+    }
+    return [{ value: allItems, count: products.length },
+      ...categories.map(value => ({ value, count: counts.get(value) ?? 0 }))];
+  }, [categories, products]);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [noteText, setNoteText] = useState('');
 
   // Filter products by category and search
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
-      const matchesCategory = activeCategory === 'All Items' || product.category === activeCategory;
+      const matchesCategory = activeCategory === allItems || product.category === activeCategory;
       const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            product.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            product.barcode.includes(searchQuery);
+                            (product.sku || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (product.barcode || '').includes(searchQuery);
       return matchesCategory && matchesSearch;
     });
   }, [products, activeCategory, searchQuery]);
 
   const handleProductClick = (product) => {
-    const hasProductAddons = (product.hasAddons && product.addons?.length > 0) || (product.addons?.length > 0);
-    if (product.hasSizes || hasProductAddons) {
+    if (isDraftSaving) return;
+    const hasProductAddons = product.hasAddons !== false && product.addons?.length > 0;
+    if ((product.hasSizes && product.sizes?.length > 0) || hasProductAddons) {
       openModal('customization', product);
     } else {
       addToCart(product);
@@ -75,14 +109,15 @@ export default function PosTerminal() {
   };
 
   const handleSearchKeyDown = (e) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
+    if (e.key === 'Enter' && !isDraftSaving && searchQuery.trim()) {
       e.preventDefault();
-      const exactMatch = products.find(p => 
-        p.barcode === searchQuery.trim() || 
-        p.sku.toLowerCase() === searchQuery.trim().toLowerCase()
-      );
-      if (exactMatch) {
-        handleProductClick(exactMatch);
+      const query = searchQuery.trim().toLowerCase();
+      const matches = products.filter(product =>
+        product.barcode === query || product.sku?.toLowerCase() === query);
+      if (matches.length > 1) {
+        showToast('Multiple products use this code. Select the intended product.', 'warning');
+      } else if (matches.length === 1) {
+        handleProductClick(matches[0]);
         setSearchQuery('');
       } else if (filteredProducts.length === 1) {
         handleProductClick(filteredProducts[0]);
@@ -91,18 +126,24 @@ export default function PosTerminal() {
     }
   };
 
-  const handleSaveNote = (cartItemId) => {
-    updateCartItemNote(cartItemId, noteText);
+  const handleSaveNote = async (cartItemId) => {
+    if (!await updateCartItemNote(cartItemId, noteText)) return;
     setEditingNoteId(null);
     setNoteText('');
   };
+
+  function changeOrderType(value) {
+    setOrderChannel(value);
+    triggerAudio('beep');
+    setShowOrderTypes(false);
+  }
 
   // Reusable Cart Panel Inner Component
   const renderCartContent = (isDrawer = false) => (
     <div className="flex-1 flex flex-col justify-between h-full min-h-0 overflow-hidden bg-[#131822]">
       {/* Cart Header */}
-      <div className="p-3 bg-[#161c28] border-b border-[#212a3a] flex items-center justify-between shrink-0">
-        <div>
+      <div className="px-3 py-3 sm:px-4 bg-[#161c28] border-b border-[#212a3a] flex items-center justify-between shrink-0">
+        <div className="min-w-0">
           <div className="flex items-center space-x-2">
             <span className="text-xs font-bold text-white uppercase tracking-wider">
               Current Order
@@ -112,8 +153,7 @@ export default function PosTerminal() {
             </span>
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[220px]">
-            {selectedTable ? `Table: ${selectedTable.name}` : 'Counter Bill'} 
-            {selectedCustomer ? ` • ${selectedCustomer.name}` : ''}
+            {selectedTable ? selectedTable.name : 'Counter bill'}
           </div>
         </div>
         <div className="flex items-center space-x-2">
@@ -121,14 +161,14 @@ export default function PosTerminal() {
             <button
               onClick={clearCart}
               className="text-[11px] text-slate-400 hover:text-rose-400 transition-colors"
-              title="Clear Cart (F1)"
+              title="Clear Cart"
             >
-              Clear (F1)
+              Clear Cart
             </button>
           )}
           {isDrawer && (
             <button
-              onClick={() => setIsMobileCartOpen(false)}
+              aria-label="Close cart" onClick={() => setIsMobileCartOpen(false)}
               className="p-1 rounded-lg hover:bg-[#1f2738] text-slate-400 hover:text-white"
             >
               <X className="w-4 h-4" />
@@ -138,9 +178,28 @@ export default function PosTerminal() {
       </div>
 
       {/* Cart Items List */}
-      <div className="flex-1 p-3 overflow-y-auto space-y-2.5 min-h-0">
+      <div className="flex-1 px-3 py-3 sm:px-4 overflow-y-auto space-y-2.5 min-h-0">
+        <div className="flex items-center rounded-xl border border-[#2b3547] bg-[#171d2a]">
+          <button type="button" aria-label={selectedCustomer ? 'Change customer' : 'Select customer'}
+            aria-haspopup="dialog" disabled={isDraftSaving} onClick={() => setCustomerPickerRevision(paymentRevision)}
+            className="flex min-h-12 min-w-0 flex-1 items-center gap-2.5 rounded-xl px-3 py-2 text-left hover:bg-slate-800 disabled:opacity-60">
+            <UserRound className="size-4 shrink-0 text-orange-300" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs text-slate-400">Customer</span>
+              <span className="block truncate text-sm font-semibold text-slate-100">{selectedCustomer?.name || 'Walk-in guest'}</span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+          </button>
+          {selectedCustomer && (
+            <button type="button" aria-label="Unlink customer" disabled={isDraftSaving} onClick={() => setCartCustomer(null)}
+              className="mr-1 grid size-11 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-60">
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+
         {cart.length === 0 ? (
-          <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-center p-6 text-slate-500">
+          <div className="min-h-[160px] flex flex-col items-center justify-center text-center p-6 text-slate-500">
             <div className="w-12 h-12 rounded-2xl bg-[#19202e] border border-[#263145] flex items-center justify-center mb-3 text-slate-600">
               <ShoppingBag className="w-6 h-6" />
             </div>
@@ -174,7 +233,7 @@ export default function PosTerminal() {
                   )}
                 </div>
                 <button
-                  onClick={() => removeCartItem(item.id)}
+                  disabled={isDraftSaving} aria-label={`Remove ${item.name}`} onClick={() => removeCartItem(item.id)}
                   className="text-slate-500 hover:text-rose-400 transition-colors p-1"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -188,17 +247,17 @@ export default function PosTerminal() {
                     type="text"
                     value={noteText}
                     onChange={(e) => setNoteText(e.target.value)}
-                    placeholder="Kitchen instruction..."
+                    placeholder="Item note..."
                     className="flex-1 bg-[#10141d] text-xs text-slate-200 px-2 py-1 rounded border border-[#2b3547] focus:outline-none"
                   />
                   <button
-                    onClick={() => handleSaveNote(item.id)}
+                    aria-label="Save item note" disabled={isDraftSaving} onClick={() => handleSaveNote(item.id)}
                     className="p-1 rounded bg-emerald-600 text-white"
                   >
                     <Check className="w-3 h-3" />
                   </button>
                   <button
-                    onClick={() => setEditingNoteId(null)}
+                    aria-label="Cancel item note" onClick={() => setEditingNoteId(null)}
                     className="p-1 rounded bg-slate-700 text-slate-300"
                   >
                     <X className="w-3 h-3" />
@@ -221,7 +280,7 @@ export default function PosTerminal() {
                 </div>
                 <div className="flex items-center space-x-2 bg-[#111620] px-1.5 py-0.5 rounded-lg border border-[#263143]">
                   <button
-                    onClick={() => updateCartQuantity(item.id, -1)}
+                    aria-label={`Remove one ${item.name}`} disabled={isDraftSaving} onClick={() => updateCartQuantity(item.id, -1)}
                     className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white"
                   >
                     <Minus className="w-3 h-3" />
@@ -230,7 +289,7 @@ export default function PosTerminal() {
                     {item.quantity}
                   </span>
                   <button
-                    onClick={() => updateCartQuantity(item.id, 1)}
+                    aria-label={`Add one ${item.name}`} disabled={isDraftSaving} onClick={() => updateCartQuantity(item.id, 1)}
                     className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white"
                   >
                     <Plus className="w-3 h-3" />
@@ -243,8 +302,8 @@ export default function PosTerminal() {
       </div>
 
       {/* Cart Calculation Footer */}
-      <div className="p-3 sm:p-4 bg-[#141a25] border-t border-[#212b3c] space-y-2.5 shrink-0">
-        {/* Discount Pill Input */}
+      <div className="px-3 py-3 sm:p-4 bg-[#141a25] border-t border-[#212b3c] space-y-2.5 shrink-0">
+        {settings.allowCashierDiscounts && (
         <div className="flex items-center justify-between text-xs text-slate-400">
           <span className="flex items-center space-x-1">
             <Tag className="w-3.5 h-3.5 text-orange-400" />
@@ -254,7 +313,7 @@ export default function PosTerminal() {
             {[0, 5, 10, 15].map((pct) => (
               <button
                 key={pct}
-                onClick={() => setDiscountPercent(pct)}
+                aria-pressed={discountPercent === pct} onClick={() => setDiscountPercent(pct)}
                 className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
                   discountPercent === pct
                     ? 'bg-orange-500 text-white'
@@ -266,6 +325,7 @@ export default function PosTerminal() {
             ))}
           </div>
         </div>
+        )}
 
         {/* Breakdown */}
         <div className="space-y-1 text-xs text-slate-400 pt-1.5 border-t border-[#202838]">
@@ -279,14 +339,6 @@ export default function PosTerminal() {
               <span className="font-mono">-₹{discountAmount.toFixed(2)}</span>
             </div>
           )}
-          <div className="flex justify-between text-[11px]">
-            <span>CGST (2.5%)</span>
-            <span className="font-mono text-slate-300">₹{cgstAmount.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between text-[11px]">
-            <span>SGST (2.5%)</span>
-            <span className="font-mono text-slate-300">₹{sgstAmount.toFixed(2)}</span>
-          </div>
           <div className="flex justify-between items-baseline pt-1.5 border-t border-[#232c3f]">
             <span className="text-sm font-bold text-white">Grand Total</span>
             <span className="text-base sm:text-lg font-black text-white font-mono">
@@ -305,7 +357,7 @@ export default function PosTerminal() {
               showToast('Add items to cart first', 'warning');
             }
           }}
-          disabled={cart.length === 0}
+          disabled={cart.length === 0 || isDraftSaving}
           className={`w-full py-2.5 sm:py-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center space-x-2 shadow-lg transition-all ${
             cart.length > 0
               ? 'bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/25 active:scale-[0.98]'
@@ -313,7 +365,7 @@ export default function PosTerminal() {
           }`}
         >
           <CreditCard className="w-4 h-4" />
-          <span>PAY ₹{cartTotal.toFixed(2)} (F4)</span>
+          <span>{isDraftSaving ? 'Saving table…' : `PAY ₹${cartTotal.toFixed(2)}`}</span>
         </button>
       </div>
     </div>
@@ -323,222 +375,159 @@ export default function PosTerminal() {
     <div className="h-full w-full min-h-0 min-w-0 flex flex-col lg:flex-row overflow-hidden bg-[#0e1218] relative">
       {/* Left Menu & Catalog Column */}
       <div className="flex-1 min-h-0 min-w-0 flex flex-col border-r border-[#1f2735] overflow-hidden">
-        {/* Top Control Bar */}
-        <div className="p-2 sm:p-2.5 bg-[#131720] border-b border-[#212837] flex flex-wrap items-center justify-between gap-2 shrink-0">
-          {/* Search Input */}
-          <div className="flex items-center space-x-2 flex-1 min-w-[180px] sm:min-w-[240px]">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                id="pos-search-input"
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
-                placeholder="Search product (F2)..."
-                className="w-full bg-[#1b2230] text-xs text-white placeholder-slate-500 pl-9 pr-7 py-1.5 rounded-lg border border-[#2b3547] focus:outline-none focus:border-orange-500 transition-colors"
-              />
+        <div role="group" aria-label="POS controls"
+          className="app-gutters grid shrink-0 grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-2 border-b border-[#212837] bg-[#131720] py-2 sm:grid-cols-[minmax(0,1fr)_minmax(17rem,auto)] sm:py-2.5">
+          <div className="col-span-2 flex min-w-0 gap-2 sm:col-span-1">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+              <input id="pos-search-input" aria-label="Search product, SKU or barcode" type="text"
+                value={searchQuery} onChange={event => setSearchQuery(event.target.value)}
+                onKeyDown={handleSearchKeyDown} placeholder="Search"
+                className="h-11 w-full min-w-0 rounded-lg border border-[#2b3547] bg-[#1b2230] pl-9 pr-10 text-base text-white placeholder:text-slate-400 sm:text-sm" />
               {searchQuery && (
-                <button 
-                  onClick={() => setSearchQuery('')} 
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-                >
-                  <X className="w-3.5 h-3.5" />
+                <button type="button" aria-label="Clear product search" onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 grid size-11 place-items-center rounded-lg text-slate-400 hover:text-white">
+                  <X className="size-4" aria-hidden="true" />
                 </button>
               )}
             </div>
-          </div>
-
-          {/* Shortcut Keys Indicators (Visible on 2xl only) */}
-          <div className="hidden 2xl:flex items-center space-x-1 text-[10px] text-slate-400 font-mono">
-            <span className="px-1.5 py-0.5 rounded bg-[#1f2838] border border-[#2b3548]">F1 New</span>
-            <span className="px-1.5 py-0.5 rounded bg-[#1f2838] border border-[#2b3548]">F2 Find</span>
-            <span className="px-1.5 py-0.5 rounded bg-[#1f2838] border border-[#2b3548]">F4 Pay</span>
-            <span className="px-1.5 py-0.5 rounded bg-[#1f2838] border border-[#2b3548]">F8 Table</span>
-          </div>
-
-          {/* Dine-In / Takeaway / Delivery Switcher */}
-          <div className="flex items-center bg-[#181e2b] p-0.5 rounded-lg border border-[#283245] shrink-0">
-            <button
-              onClick={() => { setOrderChannel('Dine-In'); triggerAudio('beep'); }}
-              className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                orderChannel === 'Dine-In'
-                  ? 'bg-orange-500 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <UtensilsCrossed className="w-3.5 h-3.5" />
-              <span>Dine-In</span>
-            </button>
-            <button
-              onClick={() => { setOrderChannel('Takeaway'); triggerAudio('beep'); }}
-              className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                orderChannel === 'Takeaway'
-                  ? 'bg-orange-500 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Takeaway</span>
-            </button>
-            <button
-              onClick={() => { setOrderChannel('Delivery'); triggerAudio('beep'); }}
-              className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                orderChannel === 'Delivery'
-                  ? 'bg-orange-500 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Truck className="w-3.5 h-3.5" />
-              <span>Delivery</span>
+            <button type="button" aria-haspopup="dialog" aria-label={`Categories, ${activeCategory} selected`}
+              onClick={() => setShowCategories(true)}
+              className={`inline-flex min-h-11 max-w-[48%] shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold sm:hidden ${activeCategory === allItems
+                ? 'border-[#2b3547] bg-[#1b2230] text-slate-200'
+                : 'border-orange-500/40 bg-orange-500/10 text-orange-200'}`}>
+              <SlidersHorizontal className="size-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">{activeCategory === allItems ? 'Categories' : activeCategory}</span>
             </button>
           </div>
 
-          {/* Table & Customer Buttons */}
-          <div className="flex items-center space-x-1.5 shrink-0">
-            {orderChannel === 'Dine-In' && (
-              <button
-                onClick={() => openModal('tableSelect')}
-                className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                  selectedTable
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                    : 'bg-[#1b2230] border-[#2b3547] text-slate-300 hover:bg-[#252f42]'
-                }`}
-              >
-                <Grid2X2 className="w-3.5 h-3.5" />
-                <span className="truncate max-w-[100px]">
-                  {selectedTable ? selectedTable.name : 'Table (F8)'}
-                </span>
-                {selectedTable && (
-                  <span
-                    onClick={(e) => { e.stopPropagation(); setSelectedTable(null); }}
-                    className="ml-1 text-slate-400 hover:text-rose-400"
-                  >
-                    ×
-                  </span>
-                )}
+          <button type="button" aria-label={`Order type: ${orderType}`} aria-haspopup="dialog"
+            disabled={isDraftSaving} onClick={() => setShowOrderTypes(true)}
+            className="flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg border border-orange-500/35 bg-orange-500/10 px-2.5 text-xs font-semibold text-orange-200 hover:bg-orange-500/20 disabled:opacity-60 sm:hidden">
+            <OrderTypeIcon className="size-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate text-left">{orderType}</span>
+            <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
+          </button>
+
+          <div role="group" aria-label="Order type" className="hidden grid-cols-3 gap-0.5 rounded-xl border border-[#283245] bg-[#10141d] p-0.5 sm:grid">
+            {orderChannels.map(({ value, label, icon: Icon }) => (
+              <button key={value} type="button" aria-pressed={orderChannel === value}
+                onClick={() => changeOrderType(value)}
+                className={`flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold ${orderChannel === value
+                  ? 'bg-orange-700 text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+                <Icon className="size-3.5 shrink-0" aria-hidden="true" /> {label}
               </button>
-            )}
-
-            <button
-              onClick={() => openModal('customerSelect')}
-              className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                selectedCustomer
-                  ? 'bg-purple-500/10 border-purple-500/30 text-purple-300'
-                  : 'bg-[#1b2230] border-[#2b3547] text-slate-300 hover:bg-[#252f42]'
-              }`}
-            >
-              {selectedCustomer ? <User className="w-3.5 h-3.5 text-purple-400" /> : <UserPlus className="w-3.5 h-3.5" />}
-              <span className="truncate max-w-[90px]">{selectedCustomer ? selectedCustomer.name : 'Customer'}</span>
-              {selectedCustomer && (
-                <span
-                  onClick={(e) => { e.stopPropagation(); setSelectedCustomer(null); }}
-                  className="ml-1 text-slate-400 hover:text-rose-400"
-                >
-                  ×
-                </span>
-              )}
-            </button>
+            ))}
           </div>
+
+          {orderChannel === 'Dine-In' && (
+            <div className={`flex min-w-0 max-w-full items-center rounded-lg border sm:w-fit ${selectedTable
+              ? 'border-orange-500/40 bg-orange-500/10 text-orange-200'
+              : 'border-[#2b3547] bg-[#1b2230] text-slate-300'}`}>
+              <button type="button" onClick={() => openModal('tableSelect')} className={linkedControl}>
+                <Grid2X2 className="size-4 shrink-0" aria-hidden="true" />
+                <span className="truncate">{selectedTable?.name || 'Select Table'}</span>
+              </button>
+              {selectedTable && (
+                <button type="button" title="Switch to counter bill" aria-label="Switch to counter bill"
+                  onClick={() => setSelectedTable(null)} className={unlinkControl}>
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Categories Bar */}
-        <div className="px-3 py-1.5 bg-[#10141d] border-b border-[#1f2735] flex items-center space-x-1.5 overflow-x-auto select-none no-scrollbar shrink-0">
-          <button
-            onClick={() => setActiveCategory('All Items')}
-            className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-              activeCategory === 'All Items'
-                ? 'bg-orange-500 text-white shadow-sm'
-                : 'bg-[#171d28] text-slate-400 hover:text-slate-200 border border-[#232b39]'
-            }`}
-          >
-            All Items ({products.length})
-          </button>
-          {categories.map((cat) => {
-            const count = products.filter(p => p.category === cat).length;
-            const isSelected = activeCategory === cat;
-            return (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                  isSelected
-                    ? 'bg-orange-500 text-white shadow-sm'
-                    : 'bg-[#171d28] text-slate-400 hover:text-slate-200 border border-[#232b39]'
-                }`}
-              >
-                {cat} ({count})
-              </button>
-            );
-          })}
+        <div role="group" aria-label="Product categories"
+          className="app-gutters hidden shrink-0 items-center gap-1.5 overflow-x-auto border-b border-[#1f2735] bg-[#10141d] py-2 sm:flex">
+          {categoryOptions.map(({ value, count }) => (
+            <button key={value} type="button" aria-pressed={activeCategory === value} onClick={() => setActiveCategory(value)}
+              className={`min-h-9 shrink-0 rounded-full border px-3 text-xs font-semibold ${activeCategory === value
+                ? 'border-orange-500/35 bg-orange-500/10 text-orange-200'
+                : 'border-[#232b39] bg-[#171d28] text-slate-300 hover:bg-slate-800'}`}>
+              {value} ({count})
+            </button>
+          ))}
         </div>
 
         {/* Products Grid */}
-        <div className="flex-1 p-2 sm:p-3 overflow-y-auto min-h-0">
+        <div className="flex-1 app-gutters py-2 sm:py-3 overflow-y-auto min-h-0">
           {filteredProducts.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-500 p-6">
               <Search className="w-10 h-10 mb-2 stroke-1" />
               <p className="text-xs sm:text-sm">No items found matching "{searchQuery}"</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 min-[1800px]:grid-cols-5 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 min-[1800px]:grid-cols-5 gap-2.5">
               {filteredProducts.map((prod) => {
+                const isVeg = prod.dietary !== 'Non-Veg';
                 return (
                   <div
                     key={prod.id}
                     onClick={() => handleProductClick(prod)}
-                    className="bg-[#161c27] hover:bg-[#1c2432] border border-[#232b3b] hover:border-orange-500/50 rounded-xl overflow-hidden cursor-pointer transition-all duration-150 flex flex-col justify-between group shadow-sm hover:shadow-md"
+                    className="bg-[#161c27] hover:bg-[#1c2432] active:scale-[0.99] border border-[#232b3b] hover:border-orange-500/50 rounded-xl p-3 cursor-pointer transition-all duration-150 flex flex-col justify-between group shadow-sm hover:shadow-md min-h-[110px]"
                   >
-                    {/* Image with badges */}
-                    <div className="relative aspect-[4/3] w-full bg-[#10141d] overflow-hidden">
-                      <img
-                        src={prod.image}
-                        alt={prod.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                      {/* Veg / Non-Veg dot */}
-                      <div className="absolute top-1.5 left-1.5 w-3.5 h-3.5 rounded bg-white/90 border border-emerald-600 flex items-center justify-center p-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    <div>
+                      {/* Top metadata row */}
+                      <div className="flex items-center justify-between gap-1 mb-2">
+                        <div className="flex items-center space-x-1.5 min-w-0">
+                          <div
+                            className={`w-3.5 h-3.5 rounded bg-white/90 border ${
+                              isVeg ? 'border-emerald-600' : 'border-rose-600'
+                            } flex items-center justify-center p-0.5 shrink-0`}
+                            title={prod.dietary || 'Pure Veg'}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isVeg ? 'bg-emerald-600' : 'bg-rose-600'
+                              }`}
+                            ></span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 truncate uppercase font-semibold tracking-wider">
+                            {prod.category}
+                          </span>
+                        </div>
+
+                        {prod.hasSizes && prod.sizes?.length > 0 ? (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-[9px] font-bold text-amber-400 border border-amber-500/30 shrink-0">
+                            {prod.sizes?.length ?? 0} Sizes
+                          </span>
+                        ) : prod.hasAddons !== false && prod.addons?.length > 0 ? (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-[9px] font-bold text-emerald-400 border border-emerald-500/30 shrink-0">
+                            Add-ons
+                          </span>
+                        ) : null}
                       </div>
 
-                      {/* Customization badge */}
-                      {prod.hasSizes ? (
-                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[9px] font-bold text-amber-300 border border-amber-500/30">
-                          {prod.sizes.length} Sizes
-                        </div>
-                      ) : (prod.hasAddons && prod.addons?.length > 0) || prod.addons?.length > 0 ? (
-                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[9px] font-bold text-emerald-300 border border-emerald-500/30">
-                          Add-ons
-                        </div>
-                      ) : null}
-
-                      {/* Stock badge */}
-                      <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[9px] font-medium text-slate-300">
-                        {prod.stock} left
-                      </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-2 sm:p-2.5 flex-1 flex flex-col justify-between">
-                      <h4 className="text-xs font-bold text-slate-100 group-hover:text-orange-300 transition-colors line-clamp-2 leading-tight">
+                      {/* Product Name */}
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-100 group-hover:text-orange-300 transition-colors line-clamp-2 leading-snug">
                         {prod.name}
                       </h4>
+                    </div>
 
-                      <div className="mt-2 flex items-center justify-between">
+                    {/* Bottom row: Price & Add button */}
+                    <div className="mt-3 pt-2 border-t border-[#202737] flex items-center justify-between">
+                      <div>
                         <span className="text-xs sm:text-sm font-extrabold text-white font-mono">
                           ₹{prod.price}
                         </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleProductClick(prod);
-                          }}
-                          className="w-6 h-6 rounded-md bg-orange-500/20 group-hover:bg-orange-500 text-orange-400 group-hover:text-white flex items-center justify-center transition-colors"
-                        >
-                          <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                        </button>
+                        {prod.hasSizes && prod.sizes?.length > 0 && (
+                          <span className="text-[10px] text-slate-400 font-normal ml-1">onwards</span>
+                        )}
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleProductClick(prod);
+                        }}
+                        className="w-7 h-7 rounded-lg bg-orange-500/15 group-hover:bg-orange-500 text-orange-400 group-hover:text-white flex items-center justify-center transition-all duration-150 shadow-sm"
+                        disabled={isDraftSaving} aria-label={`Add ${prod.name}`} title={`Add ${prod.name}`}
+                      >
+                        <Plus className="w-4 h-4 stroke-[2.5]" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -548,8 +537,8 @@ export default function PosTerminal() {
         </div>
 
         {/* Mobile/Tablet Sticky Bottom Bar (Visible on < lg screens when cart has items) */}
-        {cart.length > 0 && (
-          <div className="lg:hidden p-2.5 bg-[#141a25]/95 backdrop-blur-md border-t border-[#232c3f] flex items-center justify-between shrink-0 z-20">
+        {(cart.length > 0 || orderChannel !== 'Dine-In') && (
+          <div className="lg:hidden app-gutters py-2.5 bg-[#141a25]/95 backdrop-blur-md border-t border-[#232c3f] flex items-center justify-between shrink-0 z-20">
             <div>
               <div className="text-[10px] text-slate-400">
                 {cart.reduce((s, i) => s + i.quantity, 0)} items in bill
@@ -574,19 +563,53 @@ export default function PosTerminal() {
         {renderCartContent(false)}
       </div>
 
+      {showCategories && (
+        <FilterDialog title="Categories"
+          groups={[{ name: 'category', label: 'Product category', value: activeCategory, options: categoryOptions }]}
+          onApply={({ category }) => setActiveCategory(category)} onClose={() => setShowCategories(false)} />
+      )}
+
+      {showOrderTypes && (
+        <Dialog label="Order type" onClose={() => setShowOrderTypes(false)}>
+          <section className="w-full max-w-xs rounded-2xl border border-slate-700 bg-[#171c26] shadow-2xl">
+            <header className="flex items-center justify-between border-b border-slate-700/60 px-4 py-2">
+              <h2 className="font-bold text-white">Order type</h2>
+              <button type="button" aria-label="Close order type" onClick={() => setShowOrderTypes(false)}
+                className="grid size-11 place-items-center rounded-lg text-slate-300 hover:bg-slate-700/50">
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </header>
+            <div className="space-y-1 p-3">
+              {orderChannels.map(({ value, label, icon: Icon }) => {
+                const selected = orderChannel === value;
+                return (
+                  <button key={value} type="button" aria-pressed={selected} disabled={isDraftSaving}
+                    onClick={() => changeOrderType(value)}
+                    className={`flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-semibold disabled:opacity-60 ${selected
+                      ? 'bg-orange-500/10 text-orange-200'
+                      : 'text-slate-200 hover:bg-slate-800'}`}>
+                    <Icon className="size-4 shrink-0" aria-hidden="true" />
+                    <span className="flex-1">{label}</span>
+                    {selected && <Check className="size-4" aria-hidden="true" />}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </Dialog>
+      )}
+
       {/* Mobile/Tablet Slide-over Drawer Cart Modal */}
       {isMobileCartOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex justify-end">
-          {/* Backdrop */}
-          <div 
-            onClick={() => setIsMobileCartOpen(false)}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
-          />
-          {/* Slide-over panel */}
-          <div className="relative w-full max-w-md bg-[#131822] h-full shadow-2xl flex flex-col z-10 border-l border-[#202837] animate-in slide-in-from-right duration-200">
+        <Dialog label="Current bill" className="justify-end items-stretch lg:hidden" onClose={() => setIsMobileCartOpen(false)}>
+          <div className="w-full max-w-md bg-[#131822] h-full shadow-2xl flex flex-col border-l border-slate-700">
             {renderCartContent(true)}
           </div>
-        </div>
+        </Dialog>
+      )}
+      {customerPickerRevision !== null && (
+        <CustomerSelectModal onSelect={customer => setCartCustomer(customer, customerPickerRevision)}
+          onClose={() => setCustomerPickerRevision(null)} />
       )}
     </div>
   );

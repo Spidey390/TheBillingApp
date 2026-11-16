@@ -1,90 +1,44 @@
-# Brew & Bite Cafe POS — CaffeFlow Enterprise (Free Lifetime Edition)
+# Brew & Bite POS
 
-A high-performance, pixel-faithful Cafe Billing Software & POS System with real-time inventory management, kitchen display system (KDS), table management, customer CRM, GST compliance, and dynamic UPI QR code checkout.
+A React and Vite cafe POS with Firebase Authentication and Cloud Firestore. Staff take orders, manage table drafts, settle bills, print invoices, and record expenses. Owners manage the catalog, tables, customers, expenses, reports, settings, and staff access. Owners can view invoice history. POS settlement requires an active staff account.
 
-## 🚀 Key Features & Capabilities
+## Setup
 
-- **Interactive POS Billing & Cart (Screens #03, #05, #07, #08, #09, #15)**
-  - Touch-friendly 10-category product catalog with live stock tracking
-  - Keyboard shortcuts (`F1` New Bill, `F2` Search, `F4` Pay, `F8` Table, `Esc`, `Enter`)
-  - Barcode scanner integration with instant lookup
-  - Order channel switcher (`Dine-In`, `Takeaway`, `Delivery`)
-  - Item customization modal with sizes, add-ons (extra cheese, espresso shots, oat milk, dips), and kitchen special instructions
-  - Automated GST calculation (5% F&B split into 2.5% CGST + 2.5% SGST) and discounts
-
-- **Dynamic UPI QR & Cash Checkout (Screens #10, #11)**
-  - Dynamic on-screen UPI QR code generator (`upi://pay?pa=...`) for instant customer scanning
-  - Cash mode with quick denomination buttons (`₹531`, `₹1000`, `₹2000`) and live change calculation
-  - Card & Split payment modes with reference tracking
-
-- **Thermal Receipt & Kitchen KOT Engine (Screens #12, #13, #14)**
-  - 80mm Wide Thermal POS format
-  - 58mm Standard 2-inch Thermal format
-  - Kitchen Order Ticket (KOT) format with token numbers and server details
-  - A4 invoice view & direct browser printing (`Ctrl+P` / `window.print()`)
-
-- **Live Orders & Kitchen Display System (KDS) (Screens #16 - #19)**
-  - Time filters (`Today`, `Yesterday`, `This Week`, `This Month`, `All`)
-  - Status management (`New`, `Preparing`, `Ready`, `Completed`, `Cancelled`)
-  - Channel filtering (`Dine In`, `Takeaway`, `Delivery`)
-  - 1-click invoice reprints and order viewing
-
-- **Table & Seating Floor Plan Management (Screens #20, #21, #06)**
-  - Multi-floor mapping (`Main Floor`, `Balcony Garden`, `Mezzanine`)
-  - Real-time occupancy status (`Available`, `Occupied`, `Reserved`)
-  - Direct `⚡ POS Bill` launcher linked to tables `T-01` to `T-10`
-
-- **Inventory Management & Recipe BOM (Screens #24 - #26)**
-  - Raw material ingredient batch tracking (Coffee beans, Milk, Sugar, Cheese, Buns)
-  - Automatic recipe deduction on bill settlement
-  - Detailed stock audit log
-  - Low-stock alerts and threshold warnings
-
-- **Customer CRM & Loyalty Database (Screen #27, #08)**
-  - Track customer phone numbers, visit frequency, lifetime spend, and preferences
-  - Quick customer lookup and registration modal at the billing counter
-
-- **Procurement & Expenses (Screens #28, #29)**
-  - Purchase invoices inward directory with vendor GSTINs
-  - Daily expense & cashflow outflow logger with voucher reference tracking
-
-- **Business Reports & GST Filing (Screens #30, #31)**
-  - Executive financial KPIs: Gross Sales, GST Tax Collected, Operating Expenses, Net Profit
-  - Standard Cafe 5.0% F&B tax breakdown table
-  - Category sales breakdown and cashier sales ranking
-  - Export CSV and print reports
-
-- **Staff Permissions & Cafe Settings (Screens #32 - #40)**
-  - Role management (Admin/Owner, Counter Cashier, Kitchen/Barista) with 4-digit PINs
-  - Business profile, GSTIN configuration, thermal printer settings, UPI VPA setup
-  - Automation toggles: Recipe BOM deduction, Web Audio API beeps/chimes, custom discounts
-  - 1-click offline database JSON backup export & demo reset
-
----
-
-## 🛠️ Tech Stack
-
-- **Framework**: React 18 + Vite 6
-- **Styling**: Tailwind CSS + Custom Dark Theme
-- **Icons**: Lucide React
-- **QR Engine**: Canvas QRCode
-- **Audio Engine**: Web Audio API Synthesizer (Zero external audio asset lag)
-- **Effects**: Canvas Confetti
-- **Storage**: LocalStorage & Offline JSON Backup
-
----
-
-## 💻 Running the App
-
-```bash
-# Install dependencies
-npm install
-
-# Start local dev server
+```sh
+npm ci
+npm test
 npm run dev
-
-# Build for production
 npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+The app uses the Firebase web registration for `thebillingapp` in [src/services/firebaseApp.js](src/services/firebaseApp.js). Firebase uses its own operator email and password accounts. There is no public sign-up page.
+
+1. In [Firebase Console](https://console.firebase.google.com/project/thebillingapp/overview), create the default Cloud Firestore database if necessary and enable **Email/Password** in Authentication. Create a user for the owner. Copy the User UID.
+2. Review [firestore.rules](firestore.rules) against the project’s existing Firestore rules before publishing. If the project hosts other applications, retain their rules alongside these rules. Deploy to this project with an authorized Firebase CLI session.
+
+   ```sh
+   npx firebase-tools login
+   npx firebase-tools deploy --only firestore:rules --project thebillingapp
+   ```
+
+3. In the Firestore console, create `operators/{ownerUid}` with `role` set to the string `owner`, `active` set to the boolean `true`, and `name` set to the owner’s display name. The first owner sign-in creates the POS workspace.
+4. Sign in as owner, open **Staff & Roles**, and enter the staff member's name, email, and password. The app creates the login and grants staff access. Select **Disable access** to suspend it.
+5. Confirm the business identity, invoice prefix, paper defaults, and UPI recipient in **Cafe Settings**. Sign in separately with the staff account to bill.
+
+## Local emulator
+
+Use a dedicated demo project ID to keep test data separate from the live project.
+
+```sh
+npx firebase-tools emulators:start --project demo-billingapp --only auth,firestore
+VITE_USE_FIREBASE_EMULATORS=true npm run dev
+```
+
+Create local users in the Auth emulator and seed the initial owner profile in the Firestore emulator. The production build always uses the registered Firebase project. Production setup instructions are also covered in the [Firebase web SDK guide](https://firebase.google.com/docs/web/setup).
+
+## Operating behavior
+
+- Firestore stores shared business data. Checkout needs a connection and records success after the invoice, table release, and customer update commit. An unpaid counter draft is retained across refreshes in that browser tab. Shared table drafts follow their tables. Starting a table order from a populated counter bill offers a choice to transfer the items or leave them at the counter.
+- UPI QR codes request payment. Staff confirm the transfer in the payment app or Card approval on the external terminal before completing the bill. Firestore does not receive a provider settlement callback. An owner can enable recording full manual refunds. Staff return the funds through the original payment method before recording the refund. Original invoices stay in history. Customer visit and spend totals represent gross activity.
+- Staff can view and record their own cash expenses. Owners can view and record expenses across the workspace.
+- Reports use India time, weeks begin Monday, and new bills apply discounts to menu prices without adding GST. New invoices save merchant details at settlement. Reprints of older invoices show their stored tax amounts and totals. Use your driver’s appropriate paper preset for the selected print format.
