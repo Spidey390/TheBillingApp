@@ -72,7 +72,7 @@ export default function OrdersKDS() {
           </div>
         ) : (
           <div className="xl:overflow-x-auto">
-            <table role="table" aria-label="Order history" className="responsive-records mobile-table orders-records w-full text-left text-xs border-collapse min-w-[700px]">
+            <table role="table" aria-label="Order history" className="responsive-records mobile-table orders-records w-full text-left text-xs border-collapse min-w-[850px]">
               <thead role="rowgroup">
                 <tr role="row" className="bg-[#121620] text-slate-400 text-[10px] font-bold uppercase tracking-wider border-b border-[#232b3a]">
                   <th role="columnheader" scope="col" aria-label="Serial number" className="record-serial px-3 py-3 text-center">No.</th>
@@ -88,9 +88,9 @@ export default function OrdersKDS() {
                   <th role="columnheader" scope="col" className="py-3 px-4 order-record-total">
                     <span className="md:hidden">Total</span><span className="hidden md:inline">Total Amount</span>
                   </th>
-                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra">Payment</th>
-                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra">Status</th>
-                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra text-right">Actions</th>
+                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra whitespace-nowrap">Payment</th>
+                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra whitespace-nowrap text-center">Status</th>
+                  <th role="columnheader" scope="col" className="py-3 px-4 mobile-table-extra whitespace-nowrap text-right">Actions</th>
                 </tr>
               </thead>
               <tbody role="rowgroup" className="divide-y divide-[#1e2636]">
@@ -152,8 +152,8 @@ export default function OrdersKDS() {
                       </td>
 
                       {/* Payment */}
-                      <td role="cell" className="py-3 px-4 mobile-table-extra"><span className="record-label" aria-hidden="true">Payment</span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-[#1c2433] text-slate-300 border border-[#2d3a4e]">
+                      <td role="cell" className="py-3 px-4 whitespace-nowrap mobile-table-extra"><span className="record-label" aria-hidden="true">Payment</span>
+                        <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-bold font-mono bg-[#1c2433] text-slate-300 border border-[#2d3a4e] whitespace-nowrap">
                           {order.paymentMethod === 'Split' && order.splitBreakdown
                             ? `Split (Cash ₹${order.splitBreakdown.cash} + UPI ₹${order.splitBreakdown.upi})`
                             : order.paymentMethod}
@@ -161,9 +161,9 @@ export default function OrdersKDS() {
                       </td>
 
                       {/* Status */}
-                      <td role="cell" className="py-3 px-4 mobile-table-extra"><span className="record-label" aria-hidden="true">Status</span>
+                      <td role="cell" className="py-3 px-4 whitespace-nowrap text-center mobile-table-extra"><span className="record-label" aria-hidden="true">Status</span>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${
                             isCompleted
                               ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                               : isPreparing
@@ -178,7 +178,7 @@ export default function OrdersKDS() {
                       </td>
 
                       {/* Actions */}
-                      <td role="cell" className="py-3 px-4 text-right record-actions mobile-table-extra">
+                      <td role="cell" className="py-3 px-4 text-right record-actions whitespace-nowrap mobile-table-extra">
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
                           <button
                             onClick={() => openModal('receipt', order)}
