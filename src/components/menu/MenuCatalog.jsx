@@ -58,7 +58,7 @@ const allCategories = 'All Categories';
 
 export default function MenuCatalog() {
   const {
-    products, saveProduct, deleteProduct, clearAllProducts, importProducts, categories, settings, showToast,
+    products, saveProduct, deleteProduct, importProducts, categories, settings, showToast,
     deleteSavedCategory, saveSavedCategory, deleteSavedAddon, saveSavedAddon
   } = useApp();
 
@@ -214,17 +214,6 @@ export default function MenuCatalog() {
     }
   };
 
-  const handleDeleteAll = async () => {
-    if (!products.length || isSaving) return;
-    if (!window.confirm(`Are you sure you want to remove ALL ${products.length} menu products? This action cannot be undone.`)) return;
-    setIsSaving(true);
-    try {
-      await clearAllProducts();
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleSave = async event => {
     event.preventDefault();
     if (isSaving) return;
@@ -286,17 +275,6 @@ export default function MenuCatalog() {
             <SlidersHorizontal className="w-4 h-4 text-orange-400" />
             <span>Manage Categories & Add-ons</span>
           </button>
-          {products.length > 0 && (
-            <button
-              type="button"
-              onClick={handleDeleteAll}
-              disabled={isSaving}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 text-rose-300 font-bold text-xs transition-colors disabled:opacity-50"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Remove All ({products.length})</span>
-            </button>
-          )}
           <button
             onClick={handleOpenCreate}
             className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-lg shadow-orange-500/25 transition-all"
