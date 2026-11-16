@@ -7,7 +7,8 @@ import { canOpen, homeView } from '../src/domain/access.js';
 import { isTableOccupied } from '../src/domain/tables.js';
 import { stores, validateBackup } from '../src/db/backup.js';
 import { sanitizeText, sanitizeNumber } from '../src/domain/sanitize.js';
-import { mergeSavedCategories } from '../src/domain/categories.js';
+import { mergeSavedCategories, removeSavedCategory } from '../src/domain/categories.js';
+import { mergeSavedAddons, removeSavedAddon } from '../src/domain/addons.js';
 
 test('new bills total menu prices less the rounded discount', () => {
   assert.deepEqual(calculateBill([{ price: 140, quantity: 2 }, { price: 260, quantity: 1 }], 10),
@@ -102,4 +103,11 @@ test('categories are deduplicated case-insensitively and merged without defaults
   assert.deepEqual(mergeSavedCategories([]), []);
   assert.deepEqual(mergeSavedCategories(['Coffee', 'Tea'], ['coffee', 'Snacks', '  Tea  ']), ['Coffee', 'Tea', 'Snacks']);
   assert.deepEqual(mergeSavedCategories(null, 'Bakery'), ['Bakery']);
+});
+
+test('categories and addons can be removed cleanly', () => {
+  assert.deepEqual(removeSavedCategory(['Coffee', 'Tea', 'Snacks'], 'tea'), ['Coffee', 'Snacks']);
+  assert.deepEqual(removeSavedCategory(['Coffee', 'Tea'], 'Unknown'), ['Coffee', 'Tea']);
+  assert.deepEqual(removeSavedAddon([{ name: 'Extra Cheese', price: 30 }, { name: 'Dip', price: 15 }], 'extra cheese'), [{ name: 'Dip', price: 15 }]);
+  assert.deepEqual(removeSavedAddon([{ name: 'Dip', price: 15 }], 'Sauce'), [{ name: 'Dip', price: 15 }]);
 });

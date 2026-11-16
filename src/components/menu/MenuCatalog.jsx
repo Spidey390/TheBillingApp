@@ -8,6 +8,7 @@ import ToggleSwitch from '../layout/ToggleSwitch';
 import { newId } from '../../domain/ids';
 import { sanitizeText } from '../../domain/sanitize';
 import { addonKey, addonNameKey, mergeSavedAddons } from '../../domain/addons';
+import { categoryKey } from '../../domain/categories';
 
 const dietaryOptions = [
   { label: 'Pure Veg', Icon: Circle, color: 'text-emerald-400' },
@@ -55,13 +56,23 @@ const optionButton = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border
 const allCategories = 'All Categories';
 
 export default function MenuCatalog() {
-  const { products, saveProduct, deleteProduct, clearAllProducts, categories, settings, showToast } = useApp();
+  const {
+    products, saveProduct, deleteProduct, clearAllProducts, categories, settings, showToast,
+    deleteSavedCategory, saveSavedCategory, deleteSavedAddon, saveSavedAddon
+  } = useApp();
 
   const [activeCategory, setActiveCategory] = useState(allCategories);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+
+  // Manage Library Modal State (Categories & Add-ons)
+  const [showManageLibrary, setShowManageLibrary] = useState(false);
+  const [libraryTab, setLibraryTab] = useState('categories');
+  const [newCatInput, setNewCatInput] = useState('');
+  const [newAddonName, setNewAddonName] = useState('');
+  const [newAddonPrice, setNewAddonPrice] = useState('');
 
   // Form State for Create/Edit Modal
   const [formName, setFormName] = useState('');
@@ -80,6 +91,26 @@ export default function MenuCatalog() {
   const availableAddons = mergeSavedAddons(settings.commonAddons)
     .filter(addon => !formAddons.some(row => addonNameKey(row.name) === addonNameKey(addon.name)));
 
+  const handleDeleteCategory = async (catToDelete) => {
+    const count = products.filter(p => categoryKey(p.category) === categoryKey(catToDelete)).length;
+    const confirmMsg = count > 0
+      ? `Delete category "${catToDelete}"? ${count} product${count > 1 ? 's' : ''} currently belong to this category and will become uncategorized.`
+      : `Delete category "${catToDelete}"?`;
+    if (window.confirm(confirmMsg)) {
+      await deleteSavedCategory(catToDelete);
+      if (formCategory === catToDelete) {
+        setFormCategory('');
+        if (categories.length <= 1) {
+          setIsNewCategory(true);
+          setNewCategoryName('');
+        }
+      }
+      if (activeCategory === catToDelete) {
+        setActiveCategory(allCategories);
+      }
+    }
+  };
+
   function addAddon(template = { name: '', price: '' }) {
     setFormAddons(rows => [...rows, { ...template, id: newId() }]);
   }
@@ -94,18 +125,28 @@ export default function MenuCatalog() {
 
   const categoryOptions = useMemo(() => {
     const counts = new Map();
+    let uncategorizedCount = 0;
     for (const product of products) {
-      counts.set(product.category, (counts.get(product.category) ?? 0) + 1);
+      if (product.category) {
+        counts.set(product.category, (counts.get(product.category) ?? 0) + 1);
+      } else {
+        uncategorizedCount++;
+      }
     }
-    return [
+    const list = [
       { value: allCategories, count: products.length },
       ...categories.map(category => ({ value: category, count: counts.get(category) ?? 0 }))
     ];
+    if (uncategorizedCount > 0) {
+      list.push({ value: 'Uncategorized', count: uncategorizedCount });
+    }
+    return list;
   }, [products, categories]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
-      const matchCat = activeCategory === allCategories || p.category === activeCategory;
+      const matchCat = activeCategory === allCategories ||
+        (activeCategory === 'Uncategorized' ? !p.category : p.category === activeCategory);
       const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
                           (p.sku || '').toLowerCase().includes(search.toLowerCase()) ||
                           (p.barcode && p.barcode.includes(search));
@@ -214,7 +255,15 @@ export default function MenuCatalog() {
             Manage cafe items, pricing, sizes, and dietary tags.
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setShowManageLibrary(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#181e2b] hover:bg-[#202738] border border-[#263143] text-slate-200 font-bold text-xs transition-colors"
+          >
+            <SlidersHorizontal className="w-4 h-4 text-orange-400" />
+            <span>Manage Categories & Add-ons</span>
+          </button>
           {products.length > 0 && (
             <button
               type="button"
@@ -417,6 +466,7 @@ export default function MenuCatalog() {
                             setFormCategory(val);
                           }
                         }}
+                        onDeleteOption={handleDeleteCategory}
                         options={[
                           ...categories.map(c => ({ value: c, label: c })),
                           { value: '__new__', label: '+ Add new category…' }
@@ -500,17 +550,36 @@ export default function MenuCatalog() {
                           <BookmarkPlus className="h-4 w-4" aria-hidden="true" /> Saved add-ons
                           <ChevronDown className="h-3.5 w-3.5 group-open:rotate-180" aria-hidden="true" />
                         </summary>
-                        <div className="mt-1 max-h-40 min-w-44 overflow-y-auto rounded-lg border border-slate-700 bg-[#181e2b] p-1">
+                        <div className="mt-1 max-h-44 min-w-48 overflow-y-auto rounded-lg border border-slate-700 bg-[#181e2b] p-1 space-y-0.5">
                           {availableAddons.map(addon => (
-                            <button key={addonKey(addon)} type="button" onClick={event => {
-                              const details = event.currentTarget.closest('details');
-                              details.open = false;
-                              details.querySelector('summary').focus();
-                              addAddon(addon);
-                            }} className="flex w-full items-center justify-between gap-3 rounded px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-700/50">
-                              <span className="min-w-0 break-words">{addon.name}</span>
-                              <span className="shrink-0 text-orange-200">₹{addon.price.toFixed(2)}</span>
-                            </button>
+                            <div key={addonKey(addon)} className="flex items-center justify-between gap-1 rounded px-2 py-1 text-left text-xs text-slate-200 hover:bg-slate-700/50 group/savedAddon">
+                              <button
+                                type="button"
+                                onClick={event => {
+                                  const details = event.currentTarget.closest('details');
+                                  if (details) details.open = false;
+                                  addAddon(addon);
+                                }}
+                                className="flex flex-1 items-center justify-between gap-2 min-w-0 py-0.5"
+                              >
+                                <span className="min-w-0 truncate">{addon.name}</span>
+                                <span className="shrink-0 text-orange-200">₹{Number(addon.price).toFixed(2)}</span>
+                              </button>
+                              <button
+                                type="button"
+                                title={`Delete saved add-on "${addon.name}"`}
+                                aria-label={`Delete saved add-on ${addon.name}`}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (window.confirm(`Delete saved add-on "${addon.name}"?`)) {
+                                    await deleteSavedAddon(addon.name);
+                                  }
+                                }}
+                                className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/50 opacity-70 group-hover/savedAddon:opacity-100 transition-all shrink-0"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </details>
@@ -536,6 +605,201 @@ export default function MenuCatalog() {
               </div>
             </footer>
           </form>
+        </Dialog>
+      )}
+
+      {showManageLibrary && (
+        <Dialog
+          isOpen={showManageLibrary}
+          onClose={() => setShowManageLibrary(false)}
+          title="Manage Categories & Add-ons"
+          maxWidth="max-w-xl"
+        >
+          <div className="space-y-4">
+            {/* Tabs */}
+            <div className="flex border-b border-[#263143]">
+              <button
+                type="button"
+                onClick={() => setLibraryTab('categories')}
+                className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-colors ${
+                  libraryTab === 'categories'
+                    ? 'border-orange-500 text-orange-400'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                Categories ({categories.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLibraryTab('addons')}
+                className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-colors ${
+                  libraryTab === 'addons'
+                    ? 'border-orange-500 text-orange-400'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                Saved Add-ons ({(settings.commonAddons || []).length})
+              </button>
+            </div>
+
+            {/* Content for Categories */}
+            {libraryTab === 'categories' && (
+              <div className="space-y-4">
+                {/* Add Category Form */}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const trimmed = newCatInput.trim();
+                    if (!trimmed) return;
+                    await saveSavedCategory(trimmed);
+                    setNewCatInput('');
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    type="text"
+                    maxLength={50}
+                    placeholder="New category name…"
+                    value={newCatInput}
+                    onChange={e => setNewCatInput(e.target.value)}
+                    className="flex-1 bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] text-sm focus:outline-none focus:border-orange-500"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl transition-colors shrink-0"
+                  >
+                    Add Category
+                  </button>
+                </form>
+
+                {/* Categories List */}
+                <div className="max-h-64 overflow-y-auto rounded-xl border border-[#263143] bg-[#121620] divide-y divide-[#1e2636]">
+                  {categories.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-400">
+                      No saved categories yet. Create your first category above!
+                    </div>
+                  ) : (
+                    categories.map(cat => {
+                      const count = products.filter(p => categoryKey(p.category) === categoryKey(cat)).length;
+                      return (
+                        <div key={cat} className="flex items-center justify-between p-3 text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-semibold text-white truncate">{cat}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 shrink-0">
+                              {count} {count === 1 ? 'product' : 'products'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            title={`Delete category "${cat}"`}
+                            onClick={async () => {
+                              const confirmMsg = count > 0
+                                ? `Delete category "${cat}"? ${count} product${count > 1 ? 's' : ''} currently belong to this category and will become uncategorized.`
+                                : `Delete category "${cat}"?`;
+                              if (window.confirm(confirmMsg)) {
+                                await deleteSavedCategory(cat);
+                                if (activeCategory === cat) setActiveCategory(allCategories);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Content for Addons */}
+            {libraryTab === 'addons' && (
+              <div className="space-y-4">
+                {/* Add Addon Form */}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const trimmed = newAddonName.trim();
+                    const price = parseFloat(newAddonPrice);
+                    if (!trimmed || !Number.isFinite(price) || price < 0) return;
+                    await saveSavedAddon({ name: trimmed, price });
+                    setNewAddonName('');
+                    setNewAddonPrice('');
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    type="text"
+                    maxLength={50}
+                    placeholder="Add-on name…"
+                    value={newAddonName}
+                    onChange={e => setNewAddonName(e.target.value)}
+                    className="flex-1 bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] text-sm focus:outline-none focus:border-orange-500"
+                  />
+                  <div className="relative w-28 shrink-0">
+                    <span className="absolute left-3 top-2.5 text-xs text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Price"
+                      value={newAddonPrice}
+                      onChange={e => setNewAddonPrice(e.target.value)}
+                      className="w-full bg-[#121620] text-white pl-6 pr-3 py-2 rounded-xl border border-[#263143] text-sm focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl transition-colors shrink-0"
+                  >
+                    Add Add-on
+                  </button>
+                </form>
+
+                {/* Addons List */}
+                <div className="max-h-64 overflow-y-auto rounded-xl border border-[#263143] bg-[#121620] divide-y divide-[#1e2636]">
+                  {(settings.commonAddons || []).length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-400">
+                      No saved add-ons yet. Create your first add-on above!
+                    </div>
+                  ) : (
+                    (settings.commonAddons || []).map(addon => {
+                      const count = products.filter(p => p.addons?.some(a => addonNameKey(a.name) === addonNameKey(addon.name))).length;
+                      return (
+                        <div key={addonKey(addon)} className="flex items-center justify-between p-3 text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-semibold text-white truncate">{addon.name}</span>
+                            <span className="text-orange-400 font-bold shrink-0">₹{Number(addon.price).toFixed(2)}</span>
+                            {count > 0 && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 shrink-0">
+                                {count} {count === 1 ? 'product' : 'products'}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            title={`Delete saved add-on "${addon.name}"`}
+                            onClick={async () => {
+                              const confirmMsg = count > 0
+                                ? `Delete saved add-on "${addon.name}"? It will also be removed from ${count} product${count > 1 ? 's' : ''}.`
+                                : `Delete saved add-on "${addon.name}"?`;
+                              if (window.confirm(confirmMsg)) {
+                                await deleteSavedAddon(addon.name);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </Dialog>
       )}
     </div>

@@ -16,3 +16,9 @@ export function mergeSavedCategories(saved, additions = []) {
   }
   return [...library.values()];
 }
+
+export function removeSavedCategory(saved, categoryToRemove) {
+  if (!Array.isArray(saved) || !categoryToRemove) return [];
+  const targetKey = categoryKey(categoryToRemove);
+  return saved.filter(cat => typeof cat === 'string' && categoryKey(cat) !== targetKey);
+}

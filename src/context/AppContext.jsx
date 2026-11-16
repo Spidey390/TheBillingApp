@@ -5,7 +5,9 @@ import { initialSettings, initialCategories } from '../data/initialData';
 import { playSound } from '../utils/audio';
 import { calculateBill, validateTender } from '../domain/billing';
 import { normalizePhone } from '../domain/customers';
-import { mergeSavedCategories } from '../domain/categories';
+import { categoryKey, mergeSavedCategories, removeSavedCategory } from '../domain/categories';
+import { addonNameKey, mergeSavedAddons, removeSavedAddon } from '../domain/addons';
+import { sanitizeText } from '../domain/sanitize';
 import { newId } from '../domain/ids';
 import { canOpen, homeView } from '../domain/access';
 import {
@@ -436,6 +438,47 @@ export function AppProvider({ children, operator, signOut }) {
       settings, tables, products, customers, orders, expenses,
       categories,
       setSettings: changes => commit(() => updateSettings(workspace, changes), 'Settings saved.'),
+      deleteSavedCategory: categoryName => commit(async () => {
+        const targetKey = categoryKey(categoryName);
+        const saved = settings.commonCategories || settings.categories || [];
+        const next = removeSavedCategory(saved, categoryName);
+        await updateSettings(workspace, { commonCategories: next, categories: next });
+
+        const affected = products.filter(p => categoryKey(p.category) === targetKey);
+        for (const prod of affected) {
+          await saveUniqueRecord(workspace, 'products', { ...prod, category: '' });
+        }
+      }, `Category "${categoryName}" removed.`),
+      saveSavedCategory: categoryName => commit(async () => {
+        const clean = sanitizeText(categoryName, 50);
+        if (!clean) throw new Error('Category name cannot be empty.');
+        const next = mergeSavedCategories(settings.commonCategories || settings.categories, [clean]);
+        await updateSettings(workspace, { commonCategories: next, categories: next });
+      }, `Category "${categoryName}" saved.`),
+      deleteSavedAddon: addonName => commit(async () => {
+        const targetKey = addonNameKey(addonName);
+        const next = removeSavedAddon(settings.commonAddons, addonName);
+        await updateSettings(workspace, { commonAddons: next });
+
+        const affected = products.filter(p => p.addons?.some(a => addonNameKey(a.name) === targetKey));
+        for (const prod of affected) {
+          const newAddons = (prod.addons || []).filter(a => addonNameKey(a.name) !== targetKey);
+          await saveUniqueRecord(workspace, 'products', {
+            ...prod,
+            hasAddons: newAddons.length > 0,
+            addons: newAddons
+          });
+        }
+      }, `Saved add-on "${addonName}" removed.`),
+      saveSavedAddon: addon => commit(async () => {
+        const cleanName = sanitizeText(addon?.name, 50);
+        const price = Number(addon?.price);
+        if (!cleanName || !Number.isFinite(price) || price < 0) {
+          throw new Error('Enter a valid name and price for the add-on.');
+        }
+        const next = mergeSavedAddons(settings.commonAddons, [{ name: cleanName, price }]);
+        await updateSettings(workspace, { commonAddons: next });
+      }, `Saved add-on "${addon?.name}" saved.`),
       createTable: table => commit(() => createTable(workspace, table), 'Table created.'),
       deleteTable: id => commit(() => deleteTable(workspace, id), 'Table removed.'),
       saveProduct: product => commit(() => saveUniqueRecord(workspace, 'products', product), 'Product saved.'),

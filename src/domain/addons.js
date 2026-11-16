@@ -1,4 +1,4 @@
-export const addonNameKey = name => name.trim().toLowerCase();
+export const addonNameKey = name => (name || '').trim().toLowerCase();
 export const addonKey = ({ name, price }) => JSON.stringify([addonNameKey(name), price]);
 
 export function mergeSavedAddons(saved, additions = []) {
@@ -11,3 +11,10 @@ export function mergeSavedAddons(saved, additions = []) {
   }
   return [...library.values()];
 }
+
+export function removeSavedAddon(saved, nameToRemove) {
+  if (!Array.isArray(saved) || !nameToRemove) return [];
+  const targetKey = addonNameKey(nameToRemove);
+  return saved.filter(addon => addon && addonNameKey(addon.name) !== targetKey);
+}
+

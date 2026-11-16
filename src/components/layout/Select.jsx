@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, Trash2 } from 'lucide-react';
 
 export default function Select({
   label,
   value,
   onChange,
+  onDeleteOption,
   options = [],
   className = '',
   buttonClassName = '',
@@ -68,27 +69,46 @@ export default function Select({
           {options.map((option) => {
             const optVal = typeof option === 'object' ? option.value : option;
             const optLabel = typeof option === 'object' ? option.label ?? option.value : option;
+            const canDelete = typeof option === 'object' ? (option.canDelete ?? true) : true;
             const isSelected = optVal === value;
 
             return (
-              <button
+              <div
                 key={optVal}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => {
-                  onChange(optVal);
-                  setIsOpen(false);
-                }}
-                className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs sm:text-sm transition-colors ${
+                className={`group/opt flex w-full items-center justify-between gap-1 rounded-lg px-2 py-0.5 transition-colors ${
                   isSelected
                     ? 'bg-orange-500/15 font-semibold text-orange-300'
                     : 'text-slate-200 hover:bg-slate-700/60 hover:text-white'
                 }`}
               >
-                <span className="truncate">{optLabel}</span>
-                {isSelected && <Check className="size-4 shrink-0 text-orange-400" aria-hidden="true" />}
-              </button>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    onChange(optVal);
+                    setIsOpen(false);
+                  }}
+                  className="flex flex-1 items-center justify-between gap-2 text-left text-xs sm:text-sm min-w-0 py-1.5"
+                >
+                  <span className="truncate">{optLabel}</span>
+                  {isSelected && <Check className="size-4 shrink-0 text-orange-400" aria-hidden="true" />}
+                </button>
+                {onDeleteOption && canDelete && optVal !== '__new__' && (
+                  <button
+                    type="button"
+                    title={'Delete ' + optLabel}
+                    aria-label={'Delete ' + optLabel}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteOption(optVal, e);
+                    }}
+                    className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/50 opacity-70 group-hover/opt:opacity-100 transition-all shrink-0"
+                  >
+                    <Trash2 className="size-3.5" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
