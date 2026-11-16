@@ -1,12 +1,14 @@
-import React, { useState, useMemo } from 'react';
-import { Plus, Edit, X, Utensils, Check, Trash2, Circle, Sprout, ChevronDown, BookmarkPlus, Ruler, SlidersHorizontal } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Plus, Edit, X, Utensils, Check, Trash2, Circle, Sprout, ChevronDown, BookmarkPlus, Ruler, SlidersHorizontal, Sparkles, Tag } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import Dialog from '../layout/Dialog';
 import FilterToolbar from '../layout/FilterToolbar';
 import ToggleSwitch from '../layout/ToggleSwitch';
+import SelectDropdown from '../layout/SelectDropdown';
 import { newId } from '../../domain/ids';
 import { sanitizeText } from '../../domain/sanitize';
 import { addonKey, addonNameKey, mergeSavedAddons } from '../../domain/addons';
+import { initialCommonAddons } from '../../data/initialData';
 
 const dietaryOptions = [
   { label: 'Pure Veg', Icon: Circle, color: 'text-emerald-400' },
@@ -74,11 +76,49 @@ export default function MenuCatalog() {
   const [hasSizes, setHasSizes] = useState(false);
   const [hasAddons, setHasAddons] = useState(false);
   const [formAddons, setFormAddons] = useState([]);
-  const availableAddons = mergeSavedAddons(settings.commonAddons)
-    .filter(addon => !formAddons.some(row => addonNameKey(row.name) === addonNameKey(addon.name)));
+  const [customAddonName, setCustomAddonName] = useState('');
+  const [customAddonPrice, setCustomAddonPrice] = useState('');
+  const [isAddonDropdownOpen, setIsAddonDropdownOpen] = useState(false);
+  const addonDropdownRef = useRef(null);
+
+  const availableAddons = useMemo(() => {
+    const pool = mergeSavedAddons(settings.commonAddons || initialCommonAddons);
+    return pool.filter(addon => !formAddons.some(row => addonNameKey(row.name) === addonNameKey(addon.name)));
+  }, [settings.commonAddons, formAddons]);
+
+  useEffect(() => {
+    if (!isAddonDropdownOpen) return;
+    function handlePointerDown(e) {
+      if (addonDropdownRef.current && !addonDropdownRef.current.contains(e.target)) {
+        setIsAddonDropdownOpen(false);
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [isAddonDropdownOpen]);
 
   function addAddon(template = { name: '', price: '' }) {
     setFormAddons(rows => [...rows, { ...template, id: newId() }]);
+  }
+
+  function handleAddCustomAddon() {
+    const cleanName = sanitizeText(customAddonName, 50);
+    const parsedPrice = parseFloat(customAddonPrice);
+    if (!cleanName) {
+      showToast('Enter an add-on name.', 'warning');
+      return;
+    }
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      showToast('Enter a valid price (₹0 or higher).', 'warning');
+      return;
+    }
+    if (formAddons.some(a => addonNameKey(a.name) === addonNameKey(cleanName))) {
+      showToast('This add-on is already added.', 'warning');
+      return;
+    }
+    addAddon({ name: cleanName, price: parsedPrice });
+    setCustomAddonName('');
+    setCustomAddonPrice('');
   }
 
   function updateAddon(index, changes) {
@@ -123,6 +163,9 @@ export default function MenuCatalog() {
     setFormSizes([{ name: 'Regular', price: '' }]);
     setHasAddons(false);
     setFormAddons([]);
+    setCustomAddonName('');
+    setCustomAddonPrice('');
+    setIsAddonDropdownOpen(false);
     setShowModal(true);
   };
 
@@ -139,6 +182,9 @@ export default function MenuCatalog() {
     setFormSizes(p.sizes || [{ name: 'Regular', price: p.price }]);
     setHasAddons(p.hasAddons ?? Boolean(p.addons?.length));
     setFormAddons(p.addons || []);
+    setCustomAddonName('');
+    setCustomAddonPrice('');
+    setIsAddonDropdownOpen(false);
     setShowModal(true);
   };
 
@@ -359,13 +405,12 @@ export default function MenuCatalog() {
 
                   <div>
                     <label className="text-slate-400 block mb-1">Category</label>
-                    <select aria-label="Category"
+                    <SelectDropdown
+                      ariaLabel="Category"
                       value={formCategory}
-                      onChange={(e) => setFormCategory(e.target.value)}
-                      className="w-full bg-[#121620] text-white px-3 py-2 rounded-xl border border-[#263143] focus:outline-none"
-                    >
-                      {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                      onChange={setFormCategory}
+                      options={categories}
+                    />
                   </div>
 
                   <div>
@@ -429,35 +474,168 @@ export default function MenuCatalog() {
                   </button>
                 </ProductOptionSection>
 
-                <ProductOptionSection title="Add-ons" icon={SlidersHorizontal} enabled={hasAddons} onChange={setHasAddons}>
-                  <OptionRows rows={formAddons} kind="Add-on" onChange={updateAddon}
-                    onRemove={index => setFormAddons(rows => rows.filter((_, i) => i !== index))} />
-                  <div className="flex flex-wrap items-start gap-2">
-                    <button type="button" onClick={() => addAddon()}
-                      className={optionButton}>
-                      <Plus className="h-4 w-4" aria-hidden="true" /> Add new add-on
-                    </button>
-                    {availableAddons.length > 0 && (
-                      <details className="group min-w-0">
-                        <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-slate-500 [&::-webkit-details-marker]:hidden">
-                          <BookmarkPlus className="h-4 w-4" aria-hidden="true" /> Saved add-ons
-                          <ChevronDown className="h-3.5 w-3.5 group-open:rotate-180" aria-hidden="true" />
-                        </summary>
-                        <div className="mt-1 max-h-40 min-w-44 overflow-y-auto rounded-lg border border-slate-700 bg-[#181e2b] p-1">
-                          {availableAddons.map(addon => (
-                            <button key={addonKey(addon)} type="button" onClick={event => {
-                              const details = event.currentTarget.closest('details');
-                              details.open = false;
-                              details.querySelector('summary').focus();
-                              addAddon(addon);
-                            }} className="flex w-full items-center justify-between gap-3 rounded px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-700/50">
-                              <span className="min-w-0 break-words">{addon.name}</span>
-                              <span className="shrink-0 text-orange-200">₹{addon.price.toFixed(2)}</span>
+                <ProductOptionSection title="Add-ons & Customizations" icon={SlidersHorizontal} enabled={hasAddons} onChange={setHasAddons}>
+                  {/* Configured Add-ons list */}
+                  {formAddons.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                        <span>Configured Add-ons ({formAddons.length})</span>
+                        <span className="text-[11px] text-slate-400">Cashier can toggle these during billing</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {formAddons.map((addon, index) => (
+                          <div key={addon.id ?? index} className="flex items-center gap-2 rounded-xl border border-slate-700/60 bg-[#161c28] p-2">
+                            <input
+                              type="text"
+                              maxLength={50}
+                              value={addon.name}
+                              onChange={e => updateAddon(index, { name: e.target.value })}
+                              placeholder="Add-on name"
+                              className="h-9 min-w-0 flex-1 rounded-lg border border-[#2b374c] bg-[#10141e] px-2.5 text-xs text-white placeholder-slate-500 focus:border-orange-500 focus:outline-none"
+                            />
+                            <div className="relative w-28 shrink-0">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={addon.price}
+                                onChange={e => updateAddon(index, { price: e.target.value })}
+                                placeholder="0.00"
+                                className="h-9 w-full rounded-lg border border-[#2b374c] bg-[#10141e] pl-6 pr-2 text-xs font-semibold tabular-nums text-white placeholder-slate-500 focus:border-orange-500 focus:outline-none"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFormAddons(rows => rows.filter((_, i) => i !== index))}
+                              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-rose-950/70 hover:text-rose-300"
+                              title="Remove add-on"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </button>
-                          ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-700/70 bg-[#10141d]/50 p-3 text-center text-xs text-slate-400">
+                      No add-ons added yet. Pick from saved presets or enter a custom add-on below.
+                    </div>
+                  )}
+
+                  {/* Add from Presets Dropdown & Quick-Add */}
+                  <div className="space-y-3 border-t border-slate-700/50 pt-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-300">Quick add from saved library:</span>
+
+                      {availableAddons.length > 0 && (
+                        <div ref={addonDropdownRef} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setIsAddonDropdownOpen(prev => !prev)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-300 transition-colors hover:bg-orange-500/20"
+                          >
+                            <BookmarkPlus className="h-3.5 w-3.5 text-orange-400" />
+                            <span>Saved Add-ons</span>
+                            <span className="rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-bold text-orange-300">
+                              {availableAddons.length}
+                            </span>
+                            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isAddonDropdownOpen ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {isAddonDropdownOpen && (
+                            <div className="absolute right-0 top-full z-50 mt-1 max-h-56 w-64 overflow-y-auto rounded-xl border border-[#2b374c] bg-[#161c28] p-1.5 shadow-2xl shadow-black/80 animate-in fade-in-0 zoom-in-95 duration-100">
+                              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                Click to add to product
+                              </div>
+                              <div className="space-y-0.5">
+                                {availableAddons.map(addon => (
+                                  <button
+                                    key={addonKey(addon)}
+                                    type="button"
+                                    onClick={() => {
+                                      addAddon(addon);
+                                      setIsAddonDropdownOpen(false);
+                                    }}
+                                    className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-slate-200 transition-colors hover:bg-[#212a3b] hover:text-white"
+                                  >
+                                    <span className="truncate">{addon.name}</span>
+                                    <span className="shrink-0 font-mono font-bold text-orange-400">
+                                      +₹{addon.price}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </details>
+                      )}
+                    </div>
+
+                    {/* Popular Chips */}
+                    {availableAddons.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {availableAddons.slice(0, 5).map(addon => (
+                          <button
+                            key={addonKey(addon)}
+                            type="button"
+                            onClick={() => addAddon(addon)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-700/80 bg-[#141923] px-2.5 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:border-orange-500/50 hover:bg-orange-500/10 hover:text-orange-300"
+                          >
+                            <Plus className="size-3 text-orange-400" />
+                            <span>{addon.name}</span>
+                            <span className="font-mono text-slate-400">₹{addon.price}</span>
+                          </button>
+                        ))}
+                      </div>
                     )}
+
+                    {/* Inline Custom Add-on Creator */}
+                    <div className="space-y-1.5 pt-1">
+                      <span className="block text-xs font-semibold text-slate-300">Or create custom add-on:</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          maxLength={50}
+                          value={customAddonName}
+                          onChange={e => setCustomAddonName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCustomAddon();
+                            }
+                          }}
+                          placeholder="Add-on name (e.g. Extra Chutney)"
+                          className="h-9 min-w-0 flex-1 rounded-lg border border-[#263143] bg-[#121620] px-3 text-xs text-white placeholder-slate-500 focus:border-orange-500 focus:outline-none"
+                        />
+                        <div className="relative w-28 shrink-0">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={customAddonPrice}
+                            onChange={e => setCustomAddonPrice(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddCustomAddon();
+                              }
+                            }}
+                            placeholder="Price"
+                            className="h-9 w-full rounded-lg border border-[#263143] bg-[#121620] pl-6 pr-2 text-xs font-semibold tabular-nums text-white placeholder-slate-500 focus:border-orange-500 focus:outline-none"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddCustomAddon}
+                          className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg bg-orange-700 px-3 text-xs font-bold text-white shadow transition-colors hover:bg-orange-600"
+                        >
+                          <Plus className="size-3.5" />
+                          <span>Add</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </ProductOptionSection>
               </fieldset>

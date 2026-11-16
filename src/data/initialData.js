@@ -1,5 +1,22 @@
 // Initial dataset for Brew & Bite Cafe POS - Clean Production State (Zero Mock Data)
 
+export const initialCommonAddons = [
+  { name: 'Extra Cheese', price: 30 },
+  { name: 'Extra Espresso Shot', price: 40 },
+  { name: 'Whipped Cream', price: 35 },
+  { name: 'Caramel Syrup', price: 30 },
+  { name: 'Hazelnut Syrup', price: 30 },
+  { name: 'Vanilla Syrup', price: 30 },
+  { name: 'Oat Milk Swap', price: 45 },
+  { name: 'Almond Milk Swap', price: 45 },
+  { name: 'Ice Cream Scoop', price: 50 },
+  { name: 'Peri Peri Seasoning', price: 20 },
+  { name: 'Extra Mayo Dip', price: 25 },
+  { name: 'Extra Butter', price: 20 },
+  { name: 'Jalapenos', price: 25 },
+  { name: 'Olives', price: 25 }
+];
+
 export const initialSettings = {
   brandName: "Brew & Bite Cafe",
   tagline: "Bengaluru • Fast Counter POS",
@@ -22,6 +39,7 @@ export const initialSettings = {
   allowCashierDiscounts: true,
   allowStaffRefunds: false,
   gstRate: 0, // Retained for settings writes under existing Firestore rules.
+  commonAddons: initialCommonAddons,
   license: "Free Lifetime Edition"
 };
 

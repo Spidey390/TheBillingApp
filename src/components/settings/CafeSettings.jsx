@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { isUpiQrImage } from '../../domain/upi';
 import { sanitizeText } from '../../domain/sanitize';
 import ToggleSwitch from '../layout/ToggleSwitch';
+import SelectDropdown from '../layout/SelectDropdown';
 
 const field = 'min-h-11 w-full min-w-0 rounded-xl border border-[#263143] bg-[#121620] px-3 py-2 text-base text-white sm:text-sm';
 const acceptedQrTypes = ['image/png', 'image/jpeg', 'image/webp'];
@@ -303,14 +304,15 @@ export default function CafeSettings() {
 
               <div>
                 <label className="text-slate-400 block mb-1">Default Thermal Size</label>
-                <select aria-label="Default Thermal Size"
+                <SelectDropdown
+                  ariaLabel="Default Thermal Size"
                   value={formData.defaultThermalSize}
-                  onChange={(e) => handleChange('defaultThermalSize', e.target.value)}
-                  className={field}
-                >
-                  <option value="80mm Standard POS Thermal">80mm Standard POS Thermal</option>
-                  <option value="58mm Standard POS Thermal">58mm Standard POS Thermal</option>
-                </select>
+                  onChange={(val) => handleChange('defaultThermalSize', val)}
+                  options={[
+                    { value: '80mm Standard POS Thermal', label: '80mm Standard POS Thermal' },
+                    { value: '58mm Standard POS Thermal', label: '58mm Standard POS Thermal' }
+                  ]}
+                />
               </div>
 
               <div className="lg:col-span-3">
