@@ -303,6 +303,41 @@ export function deleteUniqueRecord(workspace, name, id) {
   });
 }
 
+export async function importProductsBatch(workspace, productList) {
+  if (!Array.isArray(productList) || !productList.length) return;
+
+  const newCategories = productList.map(p => p.category).filter(Boolean);
+  const settingsRef = config(workspace);
+  const settingsSnap = await getDocFromServer(settingsRef);
+  const settingsData = settingsSnap.data();
+  const mergedCategories = mergeSavedCategories(
+    settingsData?.commonCategories || settingsData?.categories,
+    newCategories
+  );
+
+  await updateSettings(workspace, {
+    commonCategories: mergedCategories,
+    categories: mergedCategories
+  });
+
+  const ops = [];
+  for (const product of productList) {
+    const prodRef = row(workspace, 'products', product.id);
+    ops.push([prodRef, product]);
+    for (const key of identityRefs(workspace, 'products', product)) {
+      ops.push([key, { id: product.id }]);
+    }
+  }
+
+  for (let i = 0; i < ops.length; i += 400) {
+    const batch = writeBatch(firestore);
+    for (const [ref, data] of ops.slice(i, i + 400)) {
+      batch.set(ref, data);
+    }
+    await batch.commit();
+  }
+}
+
 export async function executeOrderTransaction(workspace, { order, tableRevision, customerId }) {
   const orderRef = row(workspace, 'orders', order.id);
   const tableRef = order.tableId ? row(workspace, 'tables', order.tableId) : null;

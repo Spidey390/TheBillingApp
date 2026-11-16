@@ -9,6 +9,7 @@ import { stores, validateBackup } from '../src/db/backup.js';
 import { sanitizeText, sanitizeNumber } from '../src/domain/sanitize.js';
 import { mergeSavedCategories, removeSavedCategory } from '../src/domain/categories.js';
 import { mergeSavedAddons, removeSavedAddon } from '../src/domain/addons.js';
+import { parseMenuCsv } from '../src/domain/csv.js';
 
 test('new bills total menu prices less the rounded discount', () => {
   assert.deepEqual(calculateBill([{ price: 140, quantity: 2 }, { price: 260, quantity: 1 }], 10),
@@ -110,4 +111,14 @@ test('categories and addons can be removed cleanly', () => {
   assert.deepEqual(removeSavedCategory(['Coffee', 'Tea'], 'Unknown'), ['Coffee', 'Tea']);
   assert.deepEqual(removeSavedAddon([{ name: 'Extra Cheese', price: 30 }, { name: 'Dip', price: 15 }], 'extra cheese'), [{ name: 'Dip', price: 15 }]);
   assert.deepEqual(removeSavedAddon([{ name: 'Dip', price: 15 }], 'Sauce'), [{ name: 'Dip', price: 15 }]);
+});
+
+test('menu CSV parser extracts valid products and ignores invalid rows', () => {
+  const csv = 'Category,Item,Selling Price,Cost Price,Dietary Type\nBurger,Veg Burger,80,0,Pure Veg\nSnacks,French Fries,70,0,Pure Veg\ninvalid,row\n';
+  const parsed = parseMenuCsv(csv);
+  assert.equal(parsed.length, 2);
+  assert.equal(parsed[0].name, 'Veg Burger');
+  assert.equal(parsed[0].category, 'Burger');
+  assert.equal(parsed[0].price, 80);
+  assert.equal(parsed[1].name, 'French Fries');
 });

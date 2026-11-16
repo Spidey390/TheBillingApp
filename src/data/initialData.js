@@ -1,4 +1,5 @@
-// Initial dataset for Brew & Bite Cafe POS - Clean Production State (Zero Mock Data)
+// Initial dataset for Brew & Bite Cafe POS
+import { defaultMenu } from './defaultMenu';
 
 export const initialCommonAddons = [
   { name: 'Extra Cheese', price: 30 },
@@ -17,12 +18,17 @@ export const initialCommonAddons = [
   { name: 'Olives', price: 25 }
 ];
 
+export const initialCategories = [
+  'Burger', 'Sandwich', 'Omelette', 'Lasagna', 'Wraps', 'Chaat', 'Desserts', 'Pizza', 'Snacks',
+  'Fresh Juice', 'Falooda', 'Milkshakes', 'Smoothie', 'Hot Beverage', 'Mocktails', 'Lassi', 'Crusher'
+];
+
 export const initialSettings = {
   brandName: "Brew & Bite Cafe",
   tagline: "Bengaluru • Fast Counter POS",
-  ownerName: "Rajesh Kumar",
+  ownerName: "Owner",
   phone: "+91 98765 43210",
-  email: "contact@brewandbite.com",
+  email: "diyasfreshcornerkvp@gmail.com",
   streetAddress: "#42, 100 Feet Road, Indiranagar",
   city: "Bengaluru",
   state: "Karnataka",
@@ -40,16 +46,14 @@ export const initialSettings = {
   allowStaffRefunds: false,
   gstRate: 0, // Retained for settings writes under existing Firestore rules.
   commonAddons: initialCommonAddons,
-  commonCategories: [],
+  commonCategories: initialCategories,
   license: "Free Lifetime Edition"
 };
 
 // The owner adds tables during setup.
 export const initialTables = [];
 
-export const initialCategories = [];
-
-export const initialProducts = [];
+export const initialProducts = defaultMenu;
 
 // Clean Production State: No mock customers, orders, suppliers, purchases, expenses or logs
 export const initialCustomers = [];

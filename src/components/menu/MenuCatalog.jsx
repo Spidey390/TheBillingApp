@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Edit, X, Utensils, Check, Trash2, Circle, Sprout, ChevronDown, BookmarkPlus, Ruler, SlidersHorizontal } from 'lucide-react';
+import { Plus, Edit, X, Utensils, Check, Trash2, Circle, Sprout, ChevronDown, BookmarkPlus, Ruler, SlidersHorizontal, Upload, FileText } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import Dialog from '../layout/Dialog';
 import Select from '../layout/Select';
@@ -9,6 +9,8 @@ import { newId } from '../../domain/ids';
 import { sanitizeText } from '../../domain/sanitize';
 import { addonKey, addonNameKey, mergeSavedAddons } from '../../domain/addons';
 import { categoryKey } from '../../domain/categories';
+import { defaultMenu } from '../../data/defaultMenu';
+import { parseMenuCsv } from '../../domain/csv';
 
 const dietaryOptions = [
   { label: 'Pure Veg', Icon: Circle, color: 'text-emerald-400' },
@@ -57,7 +59,7 @@ const allCategories = 'All Categories';
 
 export default function MenuCatalog() {
   const {
-    products, saveProduct, deleteProduct, clearAllProducts, categories, settings, showToast,
+    products, saveProduct, deleteProduct, clearAllProducts, importProducts, categories, settings, showToast,
     deleteSavedCategory, saveSavedCategory, deleteSavedAddon, saveSavedAddon
   } = useApp();
 
@@ -73,6 +75,39 @@ export default function MenuCatalog() {
   const [newCatInput, setNewCatInput] = useState('');
   const [newAddonName, setNewAddonName] = useState('');
   const [newAddonPrice, setNewAddonPrice] = useState('');
+
+  // CSV Import State
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [csvText, setCsvText] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleLoadDefaultMenu = async () => {
+    if (isImporting) return;
+    setIsImporting(true);
+    try {
+      await importProducts(defaultMenu);
+      setShowCsvModal(false);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleImportCsv = async () => {
+    if (isImporting || !csvText.trim()) return;
+    const parsed = parseMenuCsv(csvText);
+    if (!parsed.length) {
+      showToast('No valid products found in CSV. Check format: Category, Item, Selling Price, Cost Price, Dietary Type', 'error');
+      return;
+    }
+    setIsImporting(true);
+    try {
+      await importProducts(parsed);
+      setShowCsvModal(false);
+      setCsvText('');
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   // Form State for Create/Edit Modal
   const [formName, setFormName] = useState('');
@@ -247,6 +282,25 @@ export default function MenuCatalog() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {products.length === 0 && (
+            <button
+              type="button"
+              onClick={handleLoadDefaultMenu}
+              disabled={isImporting}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all disabled:opacity-50"
+            >
+              <FileText className="w-4 h-4" />
+              <span>{isImporting ? 'Importing 126 Items…' : 'Load Menu (126 Items)'}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowCsvModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#181e2b] hover:bg-[#202738] border border-[#263143] text-slate-200 font-bold text-xs transition-colors"
+          >
+            <Upload className="w-4 h-4 text-emerald-400" />
+            <span>Import CSV</span>
+          </button>
           <button
             type="button"
             onClick={() => setShowManageLibrary(true)}
@@ -297,8 +351,33 @@ export default function MenuCatalog() {
             </thead>
             <tbody role="rowgroup" className="divide-y divide-[#1e2636]">
               {!filteredProducts.length && (
-                <tr role="row"><td role="cell" colSpan={5} className="record-empty px-4 py-6 text-sm text-slate-300">
-                  {search || activeCategory !== allCategories ? 'No products match these filters.' : 'No products yet.'}
+                <tr role="row"><td role="cell" colSpan={5} className="record-empty px-4 py-10 text-center text-sm text-slate-300">
+                  {search || activeCategory !== allCategories ? (
+                    'No products match these filters.'
+                  ) : (
+                    <div className="flex flex-col items-center justify-center space-y-3 py-4">
+                      <p className="text-slate-400 text-sm">No products in catalog yet.</p>
+                      <div className="flex flex-wrap items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleLoadDefaultMenu}
+                          disabled={isImporting}
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all disabled:opacity-50"
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>{isImporting ? 'Importing 126 Items…' : 'Load Menu (126 Items)'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowCsvModal(true)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#181e2b] hover:bg-[#202738] border border-[#263143] text-slate-200 font-bold text-xs transition-colors"
+                        >
+                          <Upload className="w-4 h-4 text-emerald-400" />
+                          <span>Import from CSV</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </td></tr>
               )}
               {filteredProducts.map((p) => {
@@ -577,6 +656,90 @@ export default function MenuCatalog() {
               </div>
             </footer>
           </form>
+        </Dialog>
+      )}
+
+      {showCsvModal && (
+        <Dialog
+          isOpen={showCsvModal}
+          onClose={() => { if (!isImporting) setShowCsvModal(false); }}
+          title="Import Menu from CSV"
+          maxWidth="max-w-xl"
+        >
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-700/60 bg-[#121620] p-3 text-xs text-slate-300 space-y-1">
+              <p className="font-semibold text-white">Expected CSV format:</p>
+              <code className="block rounded bg-[#0d1117] p-2 font-mono text-[11px] text-emerald-400">
+                Category,Item,Selling Price,Cost Price,Dietary Type<br/>
+                Burger,Veg Burger,80,0,Pure Veg<br/>
+                Fresh Juice,Watermelon,50,0,Vegan
+              </code>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-300">Upload CSV File</label>
+                <button
+                  type="button"
+                  onClick={handleLoadDefaultMenu}
+                  disabled={isImporting}
+                  className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold transition-colors"
+                >
+                  Load 126 Diya's Fresh Corner Items
+                </button>
+              </div>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const text = event.target?.result;
+                    if (typeof text === 'string') setCsvText(text);
+                  };
+                  reader.readAsText(file);
+                }}
+                className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#181e2b] file:text-white hover:file:bg-[#222b3d] file:cursor-pointer"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Or Paste CSV Text</label>
+              <textarea
+                rows={8}
+                value={csvText}
+                onChange={e => setCsvText(e.target.value)}
+                placeholder="Category,Item,Selling Price,Cost Price,Dietary Type&#10;Burger,Veg Burger,80,0,Pure Veg..."
+                className="w-full rounded-xl border border-[#263143] bg-[#121620] p-3 font-mono text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <footer className="flex justify-between items-center pt-2 border-t border-[#263143]">
+              <span className="text-xs text-slate-400">
+                {csvText.trim() ? `${parseMenuCsv(csvText).length} valid items detected` : ''}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCsvModal(false)}
+                  disabled={isImporting}
+                  className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700/40"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleImportCsv}
+                  disabled={isImporting || !csvText.trim()}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors shadow-lg shadow-emerald-600/20"
+                >
+                  {isImporting ? 'Importing…' : 'Import Menu'}
+                </button>
+              </div>
+            </footer>
+          </div>
         </Dialog>
       )}
 

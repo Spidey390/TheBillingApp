@@ -13,7 +13,7 @@ import { canOpen, homeView } from '../domain/access';
 import {
   workspaceRef, initializeWorkspace, watchConfig, watchRows, executeOrderTransaction, saveTableDraft, draftRevision,
   deleteTable, createTable, updateSettings, syncPublicBrand, createExpense, deleteRecord,
-  saveUniqueRecord, deleteUniqueRecord, exportDatabaseJSON, importDatabaseJSON,
+  saveUniqueRecord, deleteUniqueRecord, importProductsBatch, exportDatabaseJSON, importDatabaseJSON,
   resetDatabaseToCleanProduction, refundOrder
 } from '../db/db';
 
@@ -488,6 +488,7 @@ export function AppProvider({ children, operator, signOut }) {
           await deleteUniqueRecord(workspace, 'products', product.id);
         }
       }, 'All menu products removed.'),
+      importProducts: productList => commit(() => importProductsBatch(workspace, productList), `${productList.length} products imported.`),
       saveCustomer, deleteCustomer: id => commit(() => deleteUniqueRecord(workspace, 'customers', id), 'Customer removed.'),
       saveExpense: record => commit(() => createExpense(workspace, { ...record, recordedBy: operator.uid, recordedByName: operator.name || operator.email }), 'Expense recorded.'),
       deleteExpense: id => commit(() => deleteRecord(workspace, 'expenses', id), 'Expense removed.'),
