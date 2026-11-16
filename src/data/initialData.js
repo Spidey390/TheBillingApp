@@ -1,38 +1,20 @@
-// Initial dataset for Brew & Bite Cafe POS
-import { defaultMenu } from './defaultMenu';
+// Production schema defaults for Brew & Bite Cafe POS - Zero local data
+// All products, categories, addons, and sizes are retrieved solely from Cloud Firestore.
 
-export const initialCommonAddons = [
-  { name: 'Extra Cheese', price: 30 },
-  { name: 'Extra Espresso Shot', price: 40 },
-  { name: 'Whipped Cream', price: 35 },
-  { name: 'Caramel Syrup', price: 30 },
-  { name: 'Hazelnut Syrup', price: 30 },
-  { name: 'Vanilla Syrup', price: 30 },
-  { name: 'Oat Milk Swap', price: 45 },
-  { name: 'Almond Milk Swap', price: 45 },
-  { name: 'Ice Cream Scoop', price: 50 },
-  { name: 'Peri Peri Seasoning', price: 20 },
-  { name: 'Extra Mayo Dip', price: 25 },
-  { name: 'Extra Butter', price: 20 },
-  { name: 'Jalapenos', price: 25 },
-  { name: 'Olives', price: 25 }
-];
+export const initialCommonAddons = [];
 
-export const initialCategories = [
-  'Burger', 'Sandwich', 'Omelette', 'Lasagna', 'Wraps', 'Chaat', 'Desserts', 'Pizza', 'Snacks',
-  'Fresh Juice', 'Falooda', 'Milkshakes', 'Smoothie', 'Hot Beverage', 'Mocktails', 'Lassi', 'Crusher'
-];
+export const initialCategories = [];
 
 export const initialSettings = {
   brandName: "Brew & Bite Cafe",
-  tagline: "Bengaluru • Fast Counter POS",
+  tagline: "Fast Counter POS",
   ownerName: "Owner",
-  phone: "+91 98765 43210",
+  phone: "",
   email: "diyasfreshcornerkvp@gmail.com",
-  streetAddress: "#42, 100 Feet Road, Indiranagar",
-  city: "Bengaluru",
-  state: "Karnataka",
-  pincode: "560038",
+  streetAddress: "",
+  city: "",
+  state: "",
+  pincode: "",
   invoicePrefix: "BB-",
   startingNumber: 1001,
   defaultThermalSize: "80mm Standard POS Thermal",
@@ -44,23 +26,18 @@ export const initialSettings = {
   audioBeepsEnabled: true,
   allowCashierDiscounts: true,
   allowStaffRefunds: false,
-  gstRate: 0, // Retained for settings writes under existing Firestore rules.
-  commonAddons: initialCommonAddons,
-  commonCategories: initialCategories,
+  gstRate: 0,
+  commonAddons: [],
+  commonCategories: [],
   license: "Free Lifetime Edition"
 };
 
-// The owner adds tables during setup.
 export const initialTables = [];
-
-export const initialProducts = defaultMenu;
-
-// Clean Production State: No mock customers, orders, suppliers, purchases, expenses or logs
+export const initialProducts = [];
 export const initialCustomers = [];
 export const initialOrders = [];
 export const initialSuppliers = [];
 export const initialPurchases = [];
 export const initialExpenses = [];
 export const initialAuditLogs = [];
-
 export const initialStaff = [];

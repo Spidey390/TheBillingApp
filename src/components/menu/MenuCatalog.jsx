@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Edit, X, Utensils, Check, Trash2, Circle, Sprout, ChevronDown, BookmarkPlus, Ruler, SlidersHorizontal, Upload, FileText } from 'lucide-react';
+import { Plus, Edit, X, Utensils, Check, Trash2, Circle, Sprout, ChevronDown, BookmarkPlus, Ruler, SlidersHorizontal, Upload } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import Dialog from '../layout/Dialog';
 import Select from '../layout/Select';
@@ -9,7 +9,6 @@ import { newId } from '../../domain/ids';
 import { sanitizeText } from '../../domain/sanitize';
 import { addonKey, addonNameKey, mergeSavedAddons } from '../../domain/addons';
 import { categoryKey } from '../../domain/categories';
-import { defaultMenu } from '../../data/defaultMenu';
 import { parseMenuCsv } from '../../domain/csv';
 
 const dietaryOptions = [
@@ -80,17 +79,6 @@ export default function MenuCatalog() {
   const [showCsvModal, setShowCsvModal] = useState(false);
   const [csvText, setCsvText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
-
-  const handleLoadDefaultMenu = async () => {
-    if (isImporting) return;
-    setIsImporting(true);
-    try {
-      await importProducts(defaultMenu);
-      setShowCsvModal(false);
-    } finally {
-      setIsImporting(false);
-    }
-  };
 
   const handleImportCsv = async () => {
     if (isImporting || !csvText.trim()) return;
@@ -196,7 +184,7 @@ export default function MenuCatalog() {
     setFormCostPrice('');
     setFormDietary('Pure Veg');
     setHasSizes(false);
-    setFormSizes([{ name: 'Regular', price: '' }]);
+    setFormSizes([]);
     setHasAddons(false);
     setFormAddons([]);
     setShowModal(true);
@@ -212,7 +200,7 @@ export default function MenuCatalog() {
     setFormCostPrice(String(p.costPrice ?? ''));
     setFormDietary(p.dietary || 'Pure Veg');
     setHasSizes(!!p.hasSizes);
-    setFormSizes(p.sizes || [{ name: 'Regular', price: p.price }]);
+    setFormSizes(p.sizes || []);
     setHasAddons(p.hasAddons ?? Boolean(p.addons?.length));
     setFormAddons(p.addons || []);
     setShowModal(true);
@@ -282,17 +270,6 @@ export default function MenuCatalog() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          {products.length === 0 && (
-            <button
-              type="button"
-              onClick={handleLoadDefaultMenu}
-              disabled={isImporting}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all disabled:opacity-50"
-            >
-              <FileText className="w-4 h-4" />
-              <span>{isImporting ? 'Importing 126 Items…' : 'Load Menu (126 Items)'}</span>
-            </button>
-          )}
           <button
             type="button"
             onClick={() => setShowCsvModal(true)}
@@ -357,25 +334,14 @@ export default function MenuCatalog() {
                   ) : (
                     <div className="flex flex-col items-center justify-center space-y-3 py-4">
                       <p className="text-slate-400 text-sm">No products in catalog yet.</p>
-                      <div className="flex flex-wrap items-center justify-center gap-3">
-                        <button
-                          type="button"
-                          onClick={handleLoadDefaultMenu}
-                          disabled={isImporting}
-                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all disabled:opacity-50"
-                        >
-                          <FileText className="w-4 h-4" />
-                          <span>{isImporting ? 'Importing 126 Items…' : 'Load Menu (126 Items)'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowCsvModal(true)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#181e2b] hover:bg-[#202738] border border-[#263143] text-slate-200 font-bold text-xs transition-colors"
-                        >
-                          <Upload className="w-4 h-4 text-emerald-400" />
-                          <span>Import from CSV</span>
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowCsvModal(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#181e2b] hover:bg-[#202738] border border-[#263143] text-slate-200 font-bold text-xs transition-colors"
+                      >
+                        <Upload className="w-4 h-4 text-emerald-400" />
+                        <span>Import from CSV</span>
+                      </button>
                     </div>
                   )}
                 </td></tr>
@@ -677,17 +643,7 @@ export default function MenuCatalog() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-300">Upload CSV File</label>
-                <button
-                  type="button"
-                  onClick={handleLoadDefaultMenu}
-                  disabled={isImporting}
-                  className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold transition-colors"
-                >
-                  Load 126 Diya's Fresh Corner Items
-                </button>
-              </div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Upload CSV File</label>
               <input
                 type="file"
                 accept=".csv,text/csv"
