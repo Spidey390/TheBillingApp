@@ -1,4 +1,4 @@
-// Production schema defaults for Brew & Bite Cafe POS - Zero local data
+// Production schema defaults for Diya’s Fresh Corner POS - Zero local data
 // All products, categories, addons, and sizes are retrieved solely from Cloud Firestore.
 
 export const initialCommonAddons = [];
@@ -6,7 +6,7 @@ export const initialCommonAddons = [];
 export const initialCategories = [];
 
 export const initialSettings = {
-  brandName: "Brew & Bite Cafe",
+  brandName: "Diya’s Fresh Corner",
   tagline: "Fast Counter POS",
   ownerName: "Owner",
   phone: "",
@@ -15,14 +15,14 @@ export const initialSettings = {
   city: "",
   state: "",
   pincode: "",
-  invoicePrefix: "BB-",
+  invoicePrefix: "DFC-",
   startingNumber: 1001,
   defaultThermalSize: "80mm Standard POS Thermal",
   receiptFooterMessage: "Thank You For Dining With Us! Visit Again!",
   termsAndConditions: "Goods once sold cannot be returned. Please check bill before leaving counter.",
   upiVpaId: "",
   upiQrImage: "",
-  payeeName: "Brew & Bite Cafe",
+  payeeName: "Diya’s Fresh Corner",
   audioBeepsEnabled: true,
   allowCashierDiscounts: true,
   allowStaffRefunds: false,

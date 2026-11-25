@@ -69,7 +69,7 @@ export default function TableManagement() {
   }, [tables, activeOrderTableId]);
 
   const tableBill = table => calculateBill(table?.activeOrder?.items ?? [],
-    table?.activeOrder?.discountPercent || 0);
+    table?.activeOrder?.discountPercent, table?.activeOrder?.fixedDiscount);
   const activeBill = tableBill(activeOrderTable);
 
   const handleLaunchPOS = async (table) => {
@@ -353,7 +353,8 @@ export default function TableManagement() {
                     </div>
                     {activeBill.discount > 0 && (
                       <div className="flex justify-between text-emerald-400">
-                        <span>Discount ({activeOrderTable.activeOrder.discountPercent}%):</span>
+                        <span>{activeOrderTable.activeOrder.fixedDiscount > 0
+                          ? 'Discount' : `Discount (${activeOrderTable.activeOrder.discountPercent}%)`}</span>
                         <span className="font-mono">- ₹{activeBill.discount.toFixed(2)}</span>
                       </div>
                     )}

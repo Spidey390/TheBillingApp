@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Plus, Wallet, Trash2, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import Dialog from '../layout/Dialog';
 import { newId } from '../../domain/ids';
-import { businessDate } from '../../domain/dates';
+import { businessDate, dateRange as rangeFor, inRange } from '../../domain/dates';
 import { sanitizeText } from '../../domain/sanitize';
+import DayCalendarPicker from '../reports/DayCalendarPicker';
 
 const expenseDate = new Intl.DateTimeFormat('en-IN', {
   day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'
@@ -14,6 +15,22 @@ const rupees = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'IN
 export default function ExpenseManagement() {
   const { expenses, saveExpense, deleteExpense, showToast, isOwner } = useApp();
 
+  const [dateRange, setDateRange] = useState('Today');
+  const ranges = ['Today', 'Yesterday', 'Specific Day', 'Last 7 Days', 'Last 30 Days', 'Custom Range', 'All'];
+
+  const today = businessDate();
+  const [specificDate, setSpecificDate] = useState(today);
+  const [custom, setCustom] = useState({ start: today, end: today });
+  const [start, end] = rangeFor(dateRange, today, { ...custom, date: specificDate });
+  const rangeValid = start <= end;
+
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(exp => {
+      const expDate = businessDate(exp.date || exp.createdAt);
+      return inRange(expDate, [start, end]);
+    });
+  }, [expenses, start, end]);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -21,7 +38,7 @@ export default function ExpenseManagement() {
   const [reason, setReason] = useState('');
   const [amount, setAmount] = useState('');
 
-  const totalOutflow = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const totalOutflow = filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
   const handleDelete = (id) => {
     if (window.confirm('Remove this expense from the records?')) deleteExpense(id);
@@ -84,6 +101,60 @@ export default function ExpenseManagement() {
         </button>
       </div>
 
+      {/* Date Range Selector */}
+      <div role="group" aria-label="Expense date range"
+        className="grid grid-cols-2 gap-1 rounded-2xl border border-[#232b3a] bg-[#141923] p-1.5 sm:inline-flex sm:flex-wrap no-print">
+        {ranges.map((r) => (
+          <button
+            key={r} type="button"
+            onClick={() => setDateRange(r)} aria-pressed={dateRange === r}
+            className={`min-h-11 rounded-xl px-2 py-1.5 text-sm font-semibold transition-colors sm:px-3 ${
+              dateRange === r
+                ? 'bg-orange-500 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            {r}
+          </button>
+        ))}
+      </div>
+
+      {dateRange === 'Specific Day' && (
+        <DayCalendarPicker value={specificDate} onChange={setSpecificDate} />
+      )}
+
+      {dateRange === 'Custom Range' && (
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3 no-print">
+          {['start', 'end'].map(key => (
+            <label key={key} className="min-w-0 text-xs font-medium text-slate-300">
+              {key === 'start' ? 'Start date' : 'End date'}
+              <input
+                type="date"
+                value={custom[key]}
+                onChange={event => setCustom({ ...custom, [key]: event.target.value })}
+                onClick={(e) => {
+                  try { e.target.showPicker?.(); } catch {}
+                }}
+                style={{ colorScheme: 'dark' }}
+                className="mt-1 block min-h-11 w-full min-w-0 cursor-pointer rounded-lg border border-slate-600 bg-slate-900 px-2 text-base text-slate-100"
+              />
+            </label>
+          ))}
+        </div>
+      )}
+
+      {dateRange !== 'All' ? (
+        rangeValid ? (
+          <p className="text-sm text-slate-300 font-medium">
+            {start === end ? `${start} · India time` : `${start} to ${end} · India time`}
+          </p>
+        ) : (
+          <p role="alert" className="text-sm text-rose-300">Start date must be on or before end date.</p>
+        )
+      ) : (
+        <p className="text-sm text-slate-300 font-medium">All recorded cash expenses</p>
+      )}
+
       <section aria-label="Cash expense summary"
         className="flex items-center gap-2.5 rounded-2xl border border-[#232b3a] bg-[#141923] px-3 py-3 sm:gap-3 sm:p-4">
         <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-500/10 text-rose-300">
@@ -91,7 +162,10 @@ export default function ExpenseManagement() {
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-slate-200">Total spent</h2>
-          <p className="text-xs text-slate-400">{expenses.length} {expenses.length === 1 ? 'entry' : 'entries'}</p>
+          <p className="text-xs text-slate-400">
+            {filteredExpenses.length} {filteredExpenses.length === 1 ? 'entry' : 'entries'}
+            {dateRange !== 'All' && <span> · {start === end ? start : `${start} to ${end}`}</span>}
+          </p>
         </div>
         <span className="min-w-0 max-w-[55%] break-words text-right text-lg font-bold tabular-nums text-rose-300 sm:text-xl">
           {rupees.format(totalOutflow)}
@@ -100,12 +174,19 @@ export default function ExpenseManagement() {
 
       {/* Expenses Table */}
       <div className="bg-[#141923] rounded-2xl border border-[#232b3a] overflow-hidden">
-        {expenses.length === 0 ? (
+        {filteredExpenses.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-8 text-center sm:py-12">
             <div className="grid size-10 place-items-center rounded-xl bg-[#1b2230] text-orange-300">
               <Wallet className="size-5" aria-hidden="true" />
             </div>
-            <h2 className="text-sm font-semibold text-white">No cash expenses yet</h2>
+            <h2 className="text-sm font-semibold text-white">
+              {expenses.length === 0 ? 'No cash expenses yet' : 'No cash expenses found for this period'}
+            </h2>
+            {expenses.length > 0 && (
+              <p className="text-xs text-slate-400">
+                Choose another date or select &quot;All&quot; to view all records.
+              </p>
+            )}
           </div>
         ) : (
           <div className="xl:overflow-x-auto">
@@ -127,7 +208,7 @@ export default function ExpenseManagement() {
                 </tr>
               </thead>
               <tbody role="rowgroup" className="divide-y divide-[#1e2636]">
-                {expenses.map((exp, index) => {
+                {filteredExpenses.map((exp, index) => {
                   const label = exp.reason || exp.title;
                   const storedDate = exp.date || (exp.createdAt && businessDate(exp.createdAt));
                   const date = new Date(`${storedDate}T00:00:00Z`);

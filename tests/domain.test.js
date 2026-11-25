@@ -18,6 +18,19 @@ test('new bills total menu prices less the rounded discount', () => {
     { subtotal: 39.98, discount: 4, total: 35.98 });
 });
 
+test('custom discounts recalculate in paise and cannot exceed the current subtotal', () => {
+  assert.deepEqual(calculateBill([{ price: 310, quantity: 1 }], 12.5),
+    { subtotal: 310, discount: 38.75, total: 271.25 });
+  assert.deepEqual(calculateBill([{ price: 2.55, quantity: 1 }], 10),
+    { subtotal: 2.55, discount: 0.26, total: 2.29 });
+  assert.deepEqual(calculateBill([{ price: 180, quantity: 1 }, { price: 130, quantity: 1 }], 0, 42.99),
+    { subtotal: 310, discount: 42.99, total: 267.01 });
+  assert.deepEqual(calculateBill([{ price: 180, quantity: 1 }], 0, 250),
+    { subtotal: 180, discount: 180, total: 0 });
+  assert.deepEqual(calculateBill([{ price: 180, quantity: 1 }], 100),
+    { subtotal: 180, discount: 180, total: 0 });
+});
+
 test('legacy reservations count as available unless they have an active order', () => {
   assert.equal(isTableOccupied({ status: 'Reserved', activeOrder: null }), false);
   assert.equal(isTableOccupied({ status: 'Reserved', activeOrder: { items: [{ quantity: 1 }] } }), true);
@@ -40,6 +53,8 @@ test('orders roll over at India midnight and the week starts on Monday', () => {
   assert.equal(businessDate('2026-11-15T18:30:00Z'), '2026-11-16');
   assert.deepEqual(dateRange('This Week', '2026-11-16'), ['2026-11-16', '2026-11-22']);
   assert.deepEqual(dateRange('Yesterday', '2027-01-01'), ['2026-12-31', '2026-12-31']);
+  assert.deepEqual(dateRange('Specific Day', '2026-11-16', { date: '2026-11-10' }), ['2026-11-10', '2026-11-10']);
+  assert.deepEqual(dateRange('Specific Day', '2026-11-16'), ['2026-11-16', '2026-11-16']);
   assert.equal(inRange('2026-10-07', dateRange('This Month', '2026-11-16')), false);
 });
 

@@ -29,7 +29,12 @@ export function dateRange(preset, date = businessDate(), custom = {}) {
     case 'This Month': return [date.slice(0, 7) + '-01', date.slice(0, 7) + '-31'];
     case 'Last 7 Days': return [shiftDate(date, -6), date];
     case 'Last 30 Days': return [shiftDate(date, -29), date];
+    case 'Specific Day': {
+      const target = custom.date || custom.start || date;
+      return [target, target];
+    }
     case 'Custom Range': return [custom.start || date, custom.end || date];
+    case 'All':
     default: return ['0000-01-01', '9999-12-31'];
   }
 }

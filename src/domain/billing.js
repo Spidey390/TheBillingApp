@@ -1,12 +1,17 @@
 export const roundMoney = value => Number(value.toFixed(2));
 
-export function calculateBill(items, discountPercent) {
+export function calculateBill(items, discountPercent = 0, fixedDiscount = 0) {
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const discount = roundMoney(subtotal * discountPercent / 100);
+  const subtotalPaise = Math.round(roundMoney(subtotal) * 100);
+  const rateBasisPoints = Math.round(discountPercent * 100);
+  const requestedPaise = fixedDiscount > 0
+    ? Math.round(fixedDiscount * 100)
+    : Math.round(subtotalPaise * rateBasisPoints / 10_000);
+  const discountPaise = Math.max(0, Math.min(subtotalPaise, requestedPaise));
   return {
-    subtotal,
-    discount,
-    total: roundMoney(subtotal - discount)
+    subtotal: subtotalPaise / 100,
+    discount: discountPaise / 100,
+    total: Math.max(0, subtotalPaise - discountPaise) / 100
   };
 }
 

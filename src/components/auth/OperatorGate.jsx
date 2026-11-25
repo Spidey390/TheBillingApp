@@ -5,7 +5,7 @@ import { sanitizeText } from '../../domain/sanitize';
 
 const auth = getAuth(app);
 if (useEmulators) connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-const defaultTitle = 'Brew & Bite Cafe POS';
+const defaultTitle = 'Diya’s Fresh Corner POS';
 const BrandTitle = React.createContext(defaultTitle);
 const Workspace = lazy(() => import('./OperatorWorkspace'));
 

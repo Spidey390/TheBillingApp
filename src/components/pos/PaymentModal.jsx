@@ -18,7 +18,7 @@ const amountField = `${field} pl-7 font-semibold tabular-nums [appearance:textfi
 export default function PaymentModal() {
   const { cartTotal, completePayment, closeModal, settings, isPaying, paymentRevision } = useApp();
   const initialRevision = useRef(paymentRevision);
-  const [paymentMode, setPaymentMode] = useState('UPI');
+  const [paymentMode, setPaymentMode] = useState(cartTotal === 0 ? 'Cash' : 'UPI');
   const [cashReceived, setCashReceived] = useState(String(Math.ceil(cartTotal)));
   const [referenceNo, setReferenceNo] = useState('');
   const [confirmed, setConfirmed] = useState(false);

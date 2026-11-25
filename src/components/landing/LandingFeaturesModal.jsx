@@ -20,7 +20,7 @@ export default function LandingFeaturesModal() {
     { label: "Resolution", value: "720p HD (1280 x 720)" },
     { label: "Frame Rate", value: "30 FPS" },
     { label: "Total Screens", value: "38 Distinct Views" },
-    { label: "Software", value: "Brew & Bite Cafe POS" },
+    { label: "Software", value: "Diya’s Fresh Corner POS" },
     { label: "License", value: "Free Lifetime Edition" },
     { label: "Offline Storage", value: "IndexedDB / SQLite JSON" },
     { label: "Compiler", value: "Antigravity AI Engine" },

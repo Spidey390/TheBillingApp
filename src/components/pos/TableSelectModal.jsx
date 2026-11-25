@@ -54,7 +54,7 @@ export default function TableSelectModal() {
                 const activeItems = table.activeOrder?.items || [];
                 const itemCount = activeItems.reduce((s, i) => s + i.quantity, 0);
                 const isOccupied = isTableOccupied(table);
-                const runningTotal = calculateBill(activeItems, table.activeOrder?.discountPercent || 0).total;
+                const runningTotal = calculateBill(activeItems, table.activeOrder?.discountPercent, table.activeOrder?.fixedDiscount).total;
 
                 return (
                   <button type="button" aria-pressed={isSelected}

@@ -99,7 +99,7 @@ export default function ReceiptModal() {
                   {order.items.map((it, idx) => (
                     <div key={idx} className="space-y-0.5">
                       <div className="flex justify-between items-start">
-                        <span className="flex-1 font-bold">{it.name}</span>
+                        <span className="min-w-0 flex-1 font-bold [overflow-wrap:anywhere]">{it.name}</span>
                         <span className="w-8 text-center">{it.quantity}</span>
                         <span className="w-16 text-right font-bold">₹{it.total.toFixed(2)}</span>
                       </div>

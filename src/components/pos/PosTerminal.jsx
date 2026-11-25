@@ -23,6 +23,8 @@ import { useApp } from '../../context/AppContext';
 import Dialog from '../layout/Dialog';
 import FilterDialog from '../layout/FilterDialog';
 import CustomerSelectModal from './CustomerSelectModal';
+import CustomItemDialog from './CustomItemDialog';
+import DiscountDialog from './DiscountDialog';
 
 const allItems = 'All Items';
 const orderChannels = [
@@ -32,6 +34,7 @@ const orderChannels = [
 ];
 const linkedControl = 'flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 text-left text-xs font-semibold hover:bg-slate-700/40 sm:text-sm';
 const unlinkControl = 'grid size-11 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-700/50 hover:text-white';
+const cartAction = 'flex min-h-11 min-w-0 items-center gap-1.5 rounded-xl border border-[#2b3547] bg-[#171d2a] px-2.5 py-2 text-left text-sm font-semibold text-slate-100 hover:border-orange-500/40 hover:bg-slate-800 disabled:opacity-60';
 
 export default function PosTerminal() {
   const {
@@ -39,6 +42,7 @@ export default function PosTerminal() {
     categories,
     cart,
     addToCart,
+    addCustomCartItem,
     updateCartQuantity,
     removeCartItem,
     updateCartItemNote,
@@ -51,7 +55,8 @@ export default function PosTerminal() {
     setCartCustomer,
     paymentRevision,
     discountPercent,
-    setDiscountPercent,
+    fixedDiscount,
+    setCartDiscount,
     cartSubtotal,
     discountAmount,
     cartTotal,
@@ -74,6 +79,9 @@ export default function PosTerminal() {
   const [showCategories, setShowCategories] = useState(false);
   const [showOrderTypes, setShowOrderTypes] = useState(false);
   const [customerPickerRevision, setCustomerPickerRevision] = useState(null);
+  const [customItemRevision, setCustomItemRevision] = useState(null);
+  const [discountEditorRevision, setDiscountEditorRevision] = useState(null);
+  const hasDiscount = discountPercent > 0 || fixedDiscount > 0;
   const { label: orderType, icon: OrderTypeIcon } = orderChannels.find(channel => channel.value === orderChannel) ?? orderChannels[0];
 
   const categoryOptions = useMemo(() => {
@@ -203,7 +211,7 @@ export default function PosTerminal() {
               <ShoppingBag className="w-6 h-6" />
             </div>
             <p className="text-sm font-semibold text-slate-400">Cart is empty</p>
-            <p className="text-xs text-slate-500 mt-1">Select items from the menu to punch bill</p>
+            <p className="text-xs text-slate-500 mt-1">Choose an item from the menu or add a custom item.</p>
           </div>
         ) : (
           cart.map((item) => (
@@ -211,8 +219,8 @@ export default function PosTerminal() {
               key={item.id}
               className="p-2.5 rounded-xl bg-[#171d2a] border border-[#242e40] space-y-2 hover:border-[#303c53] transition-colors"
             >
-              <div className="flex items-start justify-between">
-                <div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 [overflow-wrap:anywhere]">
                   <h5 className="text-xs font-bold text-white">{item.name}</h5>
                   {item.variant && (
                     <span className="text-[10px] text-slate-400 block font-medium">
@@ -233,7 +241,7 @@ export default function PosTerminal() {
                 </div>
                 <button
                   disabled={isDraftSaving} aria-label={`Remove ${item.name}`} onClick={() => removeCartItem(item.id)}
-                  className="text-slate-500 hover:text-rose-400 transition-colors p-1"
+                  className="shrink-0 text-slate-500 hover:text-rose-400 transition-colors p-1"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -302,29 +310,22 @@ export default function PosTerminal() {
 
       {/* Cart Calculation Footer */}
       <div className="px-3 py-3 sm:p-4 bg-[#141a25] border-t border-[#212b3c] space-y-2.5 shrink-0">
-        {settings.allowCashierDiscounts && (
-        <div className="flex items-center justify-between text-xs text-slate-400">
-          <span className="flex items-center space-x-1">
-            <Tag className="w-3.5 h-3.5 text-orange-400" />
-            <span>Discount:</span>
-          </span>
-          <div className="flex items-center space-x-1">
-            {[0, 5, 10, 15].map((pct) => (
-              <button
-                key={pct}
-                aria-pressed={discountPercent === pct} onClick={() => setDiscountPercent(pct)}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
-                  discountPercent === pct
-                    ? 'bg-orange-500 text-white'
-                    : 'bg-[#1b2230] text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {pct}%
-              </button>
-            ))}
-          </div>
+        <div className={`grid gap-2 ${settings.allowCashierDiscounts ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {settings.allowCashierDiscounts && (
+            <button type="button" aria-haspopup="dialog" disabled={isDraftSaving}
+              aria-label={hasDiscount ? 'Edit discount' : 'Add discount'}
+              onClick={() => setDiscountEditorRevision(paymentRevision)} className={cartAction}>
+              <Tag className="size-4 shrink-0 text-orange-300" aria-hidden="true" />
+              <span className="flex-1">Discount</span>
+              <span className="text-xs text-orange-200">{hasDiscount ? 'Edit' : 'Add'}</span>
+            </button>
+          )}
+          <button type="button" aria-haspopup="dialog" disabled={isDraftSaving}
+            onClick={() => setCustomItemRevision(paymentRevision)} className={cartAction}>
+            <Plus className="size-4 shrink-0 text-orange-300" aria-hidden="true" />
+            Custom item
+          </button>
         </div>
-        )}
 
         {/* Breakdown */}
         <div className="space-y-1 text-xs text-slate-400 pt-1.5 border-t border-[#202838]">
@@ -334,7 +335,7 @@ export default function PosTerminal() {
           </div>
           {discountAmount > 0 && (
             <div className="flex justify-between text-emerald-400">
-              <span>Discount ({discountPercent}%)</span>
+              <span>{fixedDiscount > 0 ? 'Discount' : `Discount (${discountPercent}%)`}</span>
               <span className="font-mono">-₹{discountAmount.toFixed(2)}</span>
             </div>
           )}
@@ -535,26 +536,22 @@ export default function PosTerminal() {
           )}
         </div>
 
-        {/* Mobile/Tablet Sticky Bottom Bar (Visible on < lg screens when cart has items) */}
-        {(cart.length > 0 || orderChannel !== 'Dine-In') && (
-          <div className="lg:hidden app-gutters py-2.5 bg-[#141a25]/95 backdrop-blur-md border-t border-[#232c3f] flex items-center justify-between shrink-0 z-20">
-            <div>
-              <div className="text-[10px] text-slate-400">
-                {cart.reduce((s, i) => s + i.quantity, 0)} items in bill
-              </div>
-              <div className="text-sm font-extrabold text-white font-mono">
-                ₹{cartTotal.toFixed(2)}
-              </div>
+        {/* Mobile and tablet cart bar */}
+        <div className="lg:hidden app-gutters py-2.5 bg-[#141a25]/95 backdrop-blur-md border-t border-[#232c3f] flex items-center justify-between shrink-0 z-20">
+          <div>
+            <div className="text-[10px] text-slate-400">
+              {cart.reduce((s, i) => s + i.quantity, 0)} items in bill
             </div>
-            <button
-              onClick={() => setIsMobileCartOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs flex items-center space-x-1.5 shadow-lg shadow-orange-500/25 active:scale-95"
-            >
-              <span>View Cart & Pay</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <div className="text-sm font-extrabold text-white font-mono">
+              ₹{cartTotal.toFixed(2)}
+            </div>
           </div>
-        )}
+          <button type="button" onClick={() => setIsMobileCartOpen(true)}
+            className="min-h-11 px-3.5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs flex items-center space-x-1.5 shadow-lg shadow-orange-500/25 active:scale-95">
+            <span>{cart.length ? 'View Cart & Pay' : 'View cart'}</span>
+            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {/* Desktop Cart Column (Visible on lg and up) */}
@@ -609,6 +606,15 @@ export default function PosTerminal() {
       {customerPickerRevision !== null && (
         <CustomerSelectModal onSelect={customer => setCartCustomer(customer, customerPickerRevision)}
           onClose={() => setCustomerPickerRevision(null)} />
+      )}
+      {customItemRevision !== null && (
+        <CustomItemDialog onAdd={(name, price) => addCustomCartItem(name, price, customItemRevision)}
+          onClose={() => setCustomItemRevision(null)} />
+      )}
+      {discountEditorRevision !== null && (
+        <DiscountDialog percent={discountPercent} hasDiscount={hasDiscount}
+          onApply={value => setCartDiscount(value, discountEditorRevision)}
+          onClose={() => setDiscountEditorRevision(null)} />
       )}
     </div>
   );

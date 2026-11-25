@@ -266,7 +266,7 @@ export default function CafeSettings() {
                   checked={(formData.audioBeepsEnabled ?? formData.audioEnabled) !== false} disabled={busy}
                   onChange={value => handleChange('audioBeepsEnabled', value)} />
                 <PreferenceRow icon={Percent} title="Cashier discounts"
-                  description="Let cashiers apply preset percentage discounts to bills."
+                  description="Let cashiers apply custom percentage discounts to bills."
                   checked={Boolean(formData.allowCashierDiscounts)} disabled={busy}
                   onChange={value => handleChange('allowCashierDiscounts', value)} />
               </div>

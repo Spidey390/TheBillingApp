@@ -3,7 +3,7 @@ import { onSnapshot } from 'firebase/firestore';
 import confetti from 'canvas-confetti';
 import { initialSettings, initialCategories } from '../data/initialData';
 import { playSound } from '../utils/audio';
-import { calculateBill, validateTender } from '../domain/billing';
+import { calculateBill, roundMoney, validateTender } from '../domain/billing';
 import { normalizePhone } from '../domain/customers';
 import { categoryKey, mergeSavedCategories, removeSavedCategory } from '../domain/categories';
 import { addonNameKey, mergeSavedAddons, removeSavedAddon } from '../domain/addons';
@@ -19,7 +19,7 @@ import {
 
 const AppContext = createContext();
 const emptyList = [];
-const emptyDraft = { items: [], customer: null, discountPercent: 0 };
+const emptyDraft = { items: [], customer: null, discountPercent: 0, fixedDiscount: 0 };
 const currentView = role => {
   const view = window.location.hash.slice(1);
   return canOpen(role, view) ? view : homeView(role);
@@ -102,7 +102,8 @@ export function AppProvider({ children, operator, signOut }) {
   ]), [workspace, selectedTableId, orderChannel, draftVersion, upiVpaId, upiQrImage, payeeName]);
   const selectedCustomer = draft.customer;
   const discountPercent = draft.discountPercent || 0;
-  const bill = calculateBill(cart, discountPercent);
+  const fixedDiscount = draft.fixedDiscount || 0;
+  const bill = calculateBill(cart, discountPercent, fixedDiscount);
 
   useEffect(() => {
     let running = true;
@@ -191,12 +192,12 @@ export function AppProvider({ children, operator, signOut }) {
 
   function buildDraft(current, changes) {
     const next = { ...current, ...changes };
-    if (!next.items.length && !next.customer && !next.discountPercent) return null;
+    if (!next.items.length && !next.customer && !next.discountPercent && !next.fixedDiscount) return null;
     return {
       ...next,
       id: current.id || newId(),
       revision: newId(),
-      ...calculateBill(next.items, next.discountPercent || 0),
+      ...calculateBill(next.items, next.discountPercent, next.fixedDiscount),
       updatedAt: new Date().toISOString()
     };
   }
@@ -270,6 +271,27 @@ export function AppProvider({ children, operator, signOut }) {
     });
   }
 
+  function addCustomCartItem(name, price, expectedRevision) {
+    if (operator.role !== 'staff') return false;
+    if (expectedRevision !== paymentRevision || (selectedTableId && !selectedTable)) {
+      showToast('The bill changed. Reopen Custom item to add it to the current bill.', 'error');
+      return false;
+    }
+
+    const cleanName = sanitizeText(name, 100);
+    if (!cleanName) {
+      showToast('Enter a dish name.', 'error');
+      return false;
+    }
+    if (!Number.isFinite(price) || price < 0 || roundMoney(price) !== price ||
+        !Number.isSafeInteger(Math.round(price * 100))) {
+      showToast('Enter a valid price with up to two decimal places.', 'error');
+      return false;
+    }
+
+    return addToCart({ id: `custom-${newId()}`, name: cleanName, category: 'Custom', price });
+  }
+
   function editItems(table, transform) {
     const current = table ? table.activeOrder || emptyDraft : draft;
     return writeDraft(table, current, { items: transform(current.items) });
@@ -329,6 +351,24 @@ export function AppProvider({ children, operator, signOut }) {
     return writeDraft(selectedTable, draft, { customer });
   }
 
+  function setCartDiscount(value, expectedRevision) {
+    if (operator.role !== 'staff') return false;
+    if (!settings.allowCashierDiscounts) {
+      showToast('Cashier discounts are disabled in Cafe Settings.', 'error');
+      return false;
+    }
+    if (expectedRevision !== paymentRevision || (selectedTableId && !selectedTable)) {
+      showToast('The bill changed. Reopen the discount editor and try again.', 'error');
+      return false;
+    }
+
+    if (!Number.isFinite(value) || value < 0 || value > 100 || roundMoney(value) !== value) {
+      showToast('Enter a percentage from 0 to 100 with up to two decimal places.', 'error');
+      return false;
+    }
+    return writeDraft(selectedTable, draft, { discountPercent: value, fixedDiscount: 0 });
+  }
+
   async function completePayment(paymentMethod, amountReceived, referenceNo, splitBreakdown, expectedRevision) {
     if (isOwner || paymentLock.current || draftLock.current) return false;
     if (expectedRevision !== paymentRevision || !isDbReady || !cart.length || (selectedTableId && !selectedTable) ||
@@ -361,6 +401,7 @@ export function AppProvider({ children, operator, signOut }) {
             ({ id: productId, name, category, variant, addons, note, price, quantity, total: price * quantity })),
           itemsSummary: cart.map(item => `${item.quantity}x ${item.name}`).join(', '),
           itemsCount: cart.reduce((total, item) => total + item.quantity, 0),
+          discountPercent, fixedDiscount,
           ...bill,
           merchant: { brandName, streetAddress, city, state, pincode, phone, receiptFooterMessage,
             termsAndConditions, license },
@@ -494,11 +535,8 @@ export function AppProvider({ children, operator, signOut }) {
       deleteExpense: id => commit(() => deleteRecord(workspace, 'expenses', id), 'Expense removed.'),
       activeView, setActiveView: navigate, activeModal, openModal, closeModal, modalData, toast, showToast,
       isSidebarCollapsed, setIsSidebarCollapsed, isMobileCartOpen, setIsMobileCartOpen, isMobileMenuOpen, setIsMobileMenuOpen,
-      cart, addToCart, clearCart, orderChannel, setOrderChannel, selectedTable, setSelectedTable: selectTable,
-      selectedCustomer, discountPercent,
-      setCartCustomer,
-      setDiscountPercent: discount => settings.allowCashierDiscounts &&
-        writeDraft(selectedTable, draft, { discountPercent: discount }),
+      cart, addToCart, addCustomCartItem, clearCart, orderChannel, setOrderChannel, selectedTable, setSelectedTable: selectTable,
+      selectedCustomer, setCartCustomer, discountPercent, fixedDiscount, setCartDiscount,
       updateCartQuantity: (id, delta) => editItems(selectedTable, items => adjustQuantity(items, id, delta)),
       removeCartItem: id => editItems(selectedTable, items => removeItem(items, id)),
       updateCartItemNote: (id, note) => editItems(selectedTable,
